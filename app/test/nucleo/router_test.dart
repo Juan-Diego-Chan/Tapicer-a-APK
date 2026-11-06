@@ -3,8 +3,9 @@ import 'package:tapiceria/dominio/usuario.dart';
 import 'package:tapiceria/funciones/auth/servicio_sesion.dart';
 import 'package:tapiceria/nucleo/router.dart';
 
-SesionActiva _sesion(Rol rol) => SesionActiva(Usuario(
-    uid: 'u1', nombre: 'Ana', email: 'a@b.c', rol: rol, activo: true));
+SesionActiva _sesion(Rol rol) => SesionActiva(
+  Usuario(uid: 'u1', nombre: 'Ana', email: 'a@b.c', rol: rol, activo: true),
+);
 
 void main() {
   test('sin sesión va a /entrar', () {
@@ -27,6 +28,7 @@ void main() {
     for (final r in ['/usuarios', '/compras', '/contabilidad']) {
       expect(redirigir(emp, r), '/');
     }
+    expect(redirigir(emp, '/usuarios/x'), '/');
     expect(redirigir(emp, '/pedidos'), isNull);
   });
   test('dueño entra a rutas solo dueño', () {

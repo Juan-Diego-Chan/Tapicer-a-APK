@@ -8,9 +8,16 @@ import '../funciones/auth/pantalla_inicio_sesion.dart';
 import '../funciones/auth/providers.dart';
 import '../funciones/auth/servicio_sesion.dart';
 import '../funciones/inicio/pantalla_inicio.dart';
+import '../funciones/usuarios/pantalla_usuarios.dart';
 import 'pantalla_proximamente.dart';
 
-const _rutasSoloDueno = {'/compras', '/contabilidad', '/usuarios'};
+final _rutasSoloDueno = entradasMenu
+    .where((e) => e.soloDueno)
+    .map((e) => e.ruta)
+    .toList();
+
+/// Rutas con pantalla real; el resto usa el marcador "Próximamente".
+const _rutasConPantalla = {'/usuarios'};
 
 /// Lógica pura de guardia. Devuelve la ruta destino o null si no hay que
 /// redirigir.
@@ -24,7 +31,10 @@ String? redirigir(EstadoSesion estado, String ruta) {
       return ruta == '/cuenta' ? null : '/cuenta';
     case SesionActiva(:final usuario):
       if (ruta == '/entrar' || ruta == '/cuenta') return '/';
-      if (_rutasSoloDueno.contains(ruta) && usuario.rol != Rol.dueno) {
+      final soloDueno = _rutasSoloDueno.any(
+        (r) => ruta == r || ruta.startsWith('$r/'),
+      );
+      if (soloDueno && usuario.rol != Rol.dueno) {
         return '/';
       }
       return null;
@@ -32,10 +42,10 @@ String? redirigir(EstadoSesion estado, String ruta) {
 }
 
 EstadoSesion _aEstado(AsyncValue<EstadoSesion> v) => v.when(
-      data: (e) => e,
-      loading: () => const CargandoSesion(),
-      error: (_, _) => const SinSesion(),
-    );
+  data: (e) => e,
+  loading: () => const CargandoSesion(),
+  error: (_, _) => const SinSesion(),
+);
 
 GoRouter crearRouter(Ref ref) {
   final cambios = ValueNotifier<int>(0);
@@ -44,17 +54,18 @@ GoRouter crearRouter(Ref ref) {
   final router = GoRouter(
     initialLocation: '/',
     refreshListenable: cambios,
-    redirect: (context, state) => redirigir(
-      _aEstado(ref.read(estadoSesionProvider)),
-      state.uri.path,
-    ),
+    redirect: (context, state) =>
+        redirigir(_aEstado(ref.read(estadoSesionProvider)), state.uri.path),
     routes: [
       GoRoute(path: '/', builder: (_, _) => const PantallaInicio()),
       GoRoute(path: '/entrar', builder: (_, _) => const PantallaInicioSesion()),
       GoRoute(path: '/cuenta', builder: (_, _) => const PantallaEstadoCuenta()),
       // Secciones sin pantalla todavía comparten el marcador "Próximamente".
       // Los planes siguientes reemplazan cada una por su pantalla real.
-      for (final e in entradasMenu)
+      GoRoute(path: '/usuarios', builder: (_, _) => const PantallaUsuarios()),
+      for (final e in entradasMenu.where(
+        (e) => !_rutasConPantalla.contains(e.ruta),
+      ))
         GoRoute(
           path: e.ruta,
           builder: (_, _) => PantallaProximamente(titulo: e.titulo),
