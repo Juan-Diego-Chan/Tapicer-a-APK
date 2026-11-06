@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
 import { assertFails, assertSucceeds, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
 import { anonimo, como, crearEntorno, sembrarUsuario } from './ayuda';
 
 let env: RulesTestEnvironment;
@@ -88,6 +88,57 @@ describe('usuarios', () => {
     await assertFails(getDoc(doc(db, 'usuarios_privado', 'fantasma')));
     await assertFails(getDoc(doc(db, 'config', 'general')));
     await assertFails(getDoc(doc(db, 'otra', 'x')));
+  });
+
+  it('autenticado sin doc de usuario no puede crear su propio doc de dueño', async () => {
+    await assertFails(
+      setDoc(doc(como(env, 'fantasma'), 'usuarios', 'fantasma'), {
+        nombre: 'F',
+        email: 'f@e.com',
+        rol: 'dueno',
+        activo: true,
+      }),
+    );
+  });
+
+  it('empleado inactivo no puede reactivarse', async () => {
+    await assertFails(updateDoc(doc(como(env, 'inact'), 'usuarios', 'inact'), { activo: true }));
+  });
+
+  it('empleado no borra su propio doc', async () => {
+    await assertFails(deleteDoc(doc(como(env, 'emp1'), 'usuarios', 'emp1')));
+  });
+
+  it('empleado no agrega campos vía setDoc en su propio doc', async () => {
+    const db = como(env, 'emp1');
+    const propio = {
+      nombre: 'Usuario emp1',
+      email: 'emp1@ejemplo.com',
+      rol: 'empleado',
+      activo: true,
+    };
+    await assertFails(setDoc(doc(db, 'usuarios', 'emp1'), { ...propio, rol: 'dueno' }));
+    await assertFails(setDoc(doc(db, 'usuarios', 'emp1'), { ...propio, x: 1 }));
+  });
+
+  it('empleado no puede poner un nombre que no sea texto', async () => {
+    await assertFails(updateDoc(doc(como(env, 'emp1'), 'usuarios', 'emp1'), { nombre: 123 }));
+  });
+
+  it('empleado no puede poner un nombre vacío', async () => {
+    await assertFails(updateDoc(doc(como(env, 'emp1'), 'usuarios', 'emp1'), { nombre: '' }));
+  });
+
+  it('empleado no puede poner un nombre de más de 100 caracteres', async () => {
+    const db = como(env, 'emp1');
+    await assertFails(updateDoc(doc(db, 'usuarios', 'emp1'), { nombre: 'a'.repeat(101) }));
+    await assertSucceeds(updateDoc(doc(db, 'usuarios', 'emp1'), { nombre: 'a'.repeat(100) }));
+  });
+
+  it('dueño activo lista y borra usuarios', async () => {
+    const db = como(env, 'dueno1');
+    await assertSucceeds(getDocs(collection(db, 'usuarios')));
+    await assertSucceeds(deleteDoc(doc(db, 'usuarios', 'emp2')));
   });
 });
 

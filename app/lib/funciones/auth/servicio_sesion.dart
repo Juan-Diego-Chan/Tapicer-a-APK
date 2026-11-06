@@ -42,7 +42,12 @@ String mensajeErrorAuth(String codigo) {
   switch (codigo) {
     case 'invalid-credential':
     case 'wrong-password':
+    case 'user-not-found':
       return 'Correo o contraseña incorrectos';
+    case 'invalid-email':
+      return 'El correo no es válido';
+    case 'user-disabled':
+      return 'Tu cuenta está desactivada';
     case 'network-request-failed':
       return 'Se necesita internet para iniciar sesión por primera vez';
     case 'too-many-requests':

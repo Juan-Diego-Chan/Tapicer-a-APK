@@ -86,8 +86,9 @@ class _DialogoAltaEmpleadoState extends ConsumerState<DialogoAltaEmpleado> {
                 controller: _contrasena,
                 obscureText: true,
                 decoration: const InputDecoration(labelText: 'Contraseña'),
-                validator: (v) =>
-                    (v == null || v.length < 6) ? 'Mínimo 6 caracteres' : null,
+                validator: (v) => (v == null || v.length < 6)
+                    ? mensajeErrorAuth('weak-password')
+                    : null,
               ),
               TextFormField(
                 controller: _sueldo,

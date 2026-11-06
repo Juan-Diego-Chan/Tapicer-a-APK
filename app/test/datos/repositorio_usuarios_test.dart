@@ -58,4 +58,16 @@ void main() {
     final lista = await repo.observarTodos().first;
     expect(lista.map((u) => u.uid), ['u1']);
   });
+
+  test('observarTodos omite documentos mal formados', () async {
+    await repo.guardar(ana);
+    await db.doc('usuarios/malo').set({
+      'nombre': 123,
+      'email': 'm@x.mx',
+      'rol': 'empleado',
+      'activo': true,
+    });
+    final lista = await repo.observarTodos().first;
+    expect(lista.map((u) => u.uid), ['u1']);
+  });
 }

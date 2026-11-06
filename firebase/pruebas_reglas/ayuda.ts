@@ -9,7 +9,10 @@ import { doc, setDoc, type Firestore } from 'firebase/firestore';
 const RUTA_REGLAS = fileURLToPath(new URL('../firestore.rules', import.meta.url));
 
 export async function crearEntorno(): Promise<RulesTestEnvironment> {
-  const [host, port] = (process.env.FIRESTORE_EMULATOR_HOST ?? '127.0.0.1:8080').split(':');
+  const destino = process.env.FIRESTORE_EMULATOR_HOST ?? '127.0.0.1:8080';
+  const corte = destino.lastIndexOf(':');
+  const host = destino.slice(0, corte);
+  const port = destino.slice(corte + 1);
   return initializeTestEnvironment({
     projectId: 'demo-tapiceria',
     firestore: {

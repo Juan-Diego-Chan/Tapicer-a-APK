@@ -28,6 +28,7 @@ service cloud.firestore {
       return activo() && usuario().rol == 'empleado';
     }
 
+    // Solo para update: requiere que el documento exista (usa resource).
     function soloCambia(campos) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(campos);
     }
@@ -39,7 +40,10 @@ service cloud.firestore {
       allow list: if activo();
       allow create, delete: if esDueno();
       allow update: if esDueno()
-        || (esEmpleado() && request.auth.uid == uid && soloCambia(['nombre']));
+        || (esEmpleado() && request.auth.uid == uid && soloCambia(['nombre'])
+          && request.resource.data.nombre is string
+          && request.resource.data.nombre.size() > 0
+          && request.resource.data.nombre.size() <= 100);
     }
 
     // ---- Solo dueño activo ----

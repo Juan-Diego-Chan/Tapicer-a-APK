@@ -38,6 +38,10 @@ class _PantallaInicioSesionState extends ConsumerState<PantallaInicioSesion> {
           .iniciarSesion(_correo.text.trim(), _contrasena.text);
     } on ErrorSesion catch (e) {
       if (mounted) setState(() => _error = e.mensaje);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Ocurrió un error. Intenta de nuevo.');
+      }
     } finally {
       if (mounted) setState(() => _cargando = false);
     }

@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../datos/repositorio_privado.dart';
 import '../../datos/repositorio_usuarios.dart';
 import '../../dominio/usuario.dart';
-import '../../firebase_options.dart';
+import '../../nucleo/firebase_init.dart';
 import '../auth/providers.dart';
 import '../auth/servicio_sesion.dart';
 
@@ -28,10 +28,13 @@ class CreadorCuentasFirebase implements CreadorCuentas {
     }
     final secundaria = await Firebase.initializeApp(
       name: _nombreApp,
-      options: DefaultFirebaseOptions.currentPlatform,
+      options: opcionesFirebase(),
     );
     try {
       final auth = FirebaseAuth.instanceFor(app: secundaria);
+      if (usarEmulador) {
+        await auth.useAuthEmulator(hostEmulador, puertoAuthEmulador);
+      }
       final cred = await auth.createUserWithEmailAndPassword(
         email: email,
         password: contrasena,

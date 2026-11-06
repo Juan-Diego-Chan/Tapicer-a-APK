@@ -8,15 +8,15 @@ import '../auth/servicio_sesion.dart';
 import 'dialogo_alta_empleado.dart';
 import 'servicio_alta_usuario.dart';
 
-final _usuariosProvider = StreamProvider<List<Usuario>>(
+final _usuariosProvider = StreamProvider.autoDispose<List<Usuario>>(
   (ref) => ref.watch(repositorioUsuariosProvider).observarTodos(),
 );
 
-final _sueldoProvider = StreamProvider.family<double?, String>(
+final _sueldoProvider = StreamProvider.autoDispose.family<double?, String>(
   (ref, uid) => ref.watch(repositorioPrivadoProvider).observarSueldo(uid),
 );
 
-final _diasLaboralesProvider = StreamProvider<int>(
+final _diasLaboralesProvider = StreamProvider.autoDispose<int>(
   (ref) => ref.watch(repositorioPrivadoProvider).observarDiasLaborales(),
 );
 
@@ -50,7 +50,15 @@ class PantallaUsuarios extends ConsumerWidget {
       );
       if (ok != true) return;
     }
-    await ref.read(repositorioUsuariosProvider).fijarActivo(u.uid, activo);
+    try {
+      await ref.read(repositorioUsuariosProvider).fijarActivo(u.uid, activo);
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo actualizar')),
+        );
+      }
+    }
   }
 
   @override
@@ -175,9 +183,19 @@ class _CampoDiasLaboralesState extends ConsumerState<_CampoDiasLaborales> {
 
   Future<void> _guardar() async {
     if (!_formKey.currentState!.validate()) return;
-    await ref
-        .read(repositorioPrivadoProvider)
-        .fijarDiasLaborales(int.parse(_controlador.text.trim()));
+    final mensajero = ScaffoldMessenger.of(context);
+    try {
+      await ref
+          .read(repositorioPrivadoProvider)
+          .fijarDiasLaborales(int.parse(_controlador.text.trim()));
+      mensajero.showSnackBar(
+        const SnackBar(content: Text('Días laborales guardados')),
+      );
+    } catch (_) {
+      mensajero.showSnackBar(
+        const SnackBar(content: Text('No se pudo guardar')),
+      );
+    }
   }
 
   @override

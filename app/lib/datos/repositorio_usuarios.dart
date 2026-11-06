@@ -14,9 +14,18 @@ class RepositorioUsuarios {
         return datos == null ? null : Usuario.desdeMapa(s.id, datos);
       });
 
-  Stream<List<Usuario>> observarTodos() => _col.snapshots().map(
-        (q) => q.docs.map((d) => Usuario.desdeMapa(d.id, d.data())).toList(),
-      );
+  /// Omite los documentos mal formados en vez de fallar toda la lista.
+  Stream<List<Usuario>> observarTodos() => _col.snapshots().map((q) {
+        final lista = <Usuario>[];
+        for (final d in q.docs) {
+          try {
+            lista.add(Usuario.desdeMapa(d.id, d.data()));
+          } on FormatException {
+            // documento mal formado: se omite
+          }
+        }
+        return lista;
+      });
 
   /// Crea o actualiza el usuario. `creadoEn` solo se fija cuando el documento
   /// aún no existe; al actualizar no se toca.

@@ -134,6 +134,10 @@ void main() {
           'Ese correo ya está registrado');
       expect(mensajeErrorAuth('weak-password'),
           'La contraseña debe tener al menos 6 caracteres');
+      expect(mensajeErrorAuth('invalid-email'), 'El correo no es válido');
+      expect(mensajeErrorAuth('user-not-found'),
+          'Correo o contraseña incorrectos');
+      expect(mensajeErrorAuth('user-disabled'), 'Tu cuenta está desactivada');
       expect(mensajeErrorAuth('otro'), 'Ocurrió un error. Intenta de nuevo.');
     });
   });

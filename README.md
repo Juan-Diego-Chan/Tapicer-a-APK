@@ -55,6 +55,12 @@ cd app
 flutter run --dart-define=USAR_EMULADOR=true
 ```
 
+En modo emulador la app usa el proyecto `demo-tapiceria` (igual que los
+emuladores), por lo que no puede tocar servicios de producción. Para crear al
+primer dueño, abre la Emulator UI (http://localhost:4000, que muestra el
+proyecto `demo-tapiceria`), crea el usuario en Authentication y el documento
+`usuarios/{uid}` en Firestore con los campos de la sección siguiente.
+
 ## Crear el primer dueño
 
 Solo la primera vez en cada proyecto, porque después el dueño da de alta a los
