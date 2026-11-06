@@ -1,6 +1,57 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // ---- Funciones de ayuda (reutilizadas por los planes 2-5) ----
+    function autenticado() {
+      return request.auth != null;
+    }
+
+    function existeUsuario() {
+      return autenticado()
+        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid));
+    }
+
+    function usuario() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    function activo() {
+      return existeUsuario() && usuario().activo == true;
+    }
+
+    function esDueno() {
+      return activo() && usuario().rol == 'dueno';
+    }
+
+    function esEmpleado() {
+      return activo() && usuario().rol == 'empleado';
+    }
+
+    function soloCambia(campos) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(campos);
+    }
+
+    // ---- Usuarios ----
+    match /usuarios/{uid} {
+      // Cada quien lee su propio doc (incluso inactivo, para saber que lo esta).
+      allow get: if autenticado() && (request.auth.uid == uid || activo());
+      allow list: if activo();
+      allow create, delete: if esDueno();
+      allow update: if esDueno()
+        || (esEmpleado() && request.auth.uid == uid && soloCambia(['nombre']));
+    }
+
+    // ---- Solo dueño activo ----
+    match /usuarios_privado/{uid} {
+      allow read, write: if esDueno();
+    }
+
+    match /config/{doc} {
+      allow read, write: if esDueno();
+    }
+
+    // Todo lo demas, denegado.
     match /{document=**} {
       allow read, write: if false;
     }
