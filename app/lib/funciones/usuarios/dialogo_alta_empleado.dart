@@ -48,7 +48,8 @@ class _DialogoAltaEmpleadoState extends ConsumerState<DialogoAltaEmpleado> {
       if (mounted) Navigator.of(context).pop(true);
     } on ErrorSesion catch (e) {
       if (mounted) setState(() => _error = e.mensaje);
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('Error inesperado al dar de alta: $e\n$st');
       if (mounted) {
         setState(() => _error = 'Ocurrió un error. Intenta de nuevo.');
       }

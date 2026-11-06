@@ -56,10 +56,26 @@ flutter run --dart-define=USAR_EMULADOR=true
 ```
 
 En modo emulador la app usa el proyecto `demo-tapiceria` (igual que los
-emuladores), por lo que no puede tocar servicios de producción. Para crear al
-primer dueño, abre la Emulator UI (http://localhost:4000, que muestra el
-proyecto `demo-tapiceria`), crea el usuario en Authentication y el documento
+emuladores), por lo que no puede tocar servicios de producción. Para crear un
+dueño de prueba, con los emuladores corriendo:
+
+```
+node firebase/semilla_emulador.mjs
+```
+
+El correo y la contraseña de prueba están en ese archivo. También puedes
+hacerlo a mano en la Emulator UI (http://localhost:4000, proyecto
+`demo-tapiceria`): crea el usuario en Authentication y el documento
 `usuarios/{uid}` en Firestore con los campos de la sección siguiente.
+
+Notas para el emulador de Android:
+
+- Si el emulador está en modo avión, la app no llega a los emuladores de Firebase.
+- En compilaciones de depuración, `app/android/app/src/debug/` permite HTTP sin
+  cifrar hacia `10.0.2.2` y desactiva la inicialización automática de Firebase
+  en Android, para que la app use `demo-tapiceria` en vez de `tapiceria-app`.
+- Si la ruta del repositorio tiene caracteres no ASCII (como "í"), `flutter run`
+  compila e instala pero no logra abrir la app; ábrela desde el emulador.
 
 ## Crear el primer dueño
 

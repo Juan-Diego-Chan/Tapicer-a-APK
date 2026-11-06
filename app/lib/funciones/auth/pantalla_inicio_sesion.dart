@@ -38,7 +38,8 @@ class _PantallaInicioSesionState extends ConsumerState<PantallaInicioSesion> {
           .iniciarSesion(_correo.text.trim(), _contrasena.text);
     } on ErrorSesion catch (e) {
       if (mounted) setState(() => _error = e.mensaje);
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('Error inesperado al iniciar sesión: $e\n$st');
       if (mounted) {
         setState(() => _error = 'Ocurrió un error. Intenta de nuevo.');
       }

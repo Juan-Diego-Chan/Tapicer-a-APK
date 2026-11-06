@@ -16,34 +16,48 @@ abstract class CreadorCuentas {
 
 /// Crea la cuenta en una app Firebase secundaria para no tocar la sesión del
 /// dueño. No se prueba en unitarias (requiere Firebase real).
+///
+/// La app secundaria se crea una sola vez y se reutiliza: FlutterFire guarda
+/// la instancia de FirebaseAuth por nombre de app, así que borrar y recrear
+/// 'alta' dejaba una instancia vieja ligada a la app borrada y la segunda
+/// alta fallaba.
 class CreadorCuentasFirebase implements CreadorCuentas {
   static const _nombreApp = 'alta';
+  static Future<FirebaseAuth>? _auth;
+
+  static Future<FirebaseAuth> _authSecundaria() => _auth ??= () async {
+        final existente =
+            Firebase.apps.where((a) => a.name == _nombreApp).firstOrNull;
+        final app = existente ??
+            await Firebase.initializeApp(
+              name: _nombreApp,
+              options: opcionesFirebase(),
+            );
+        final auth = FirebaseAuth.instanceFor(app: app);
+        if (usarEmulador) {
+          await auth.useAuthEmulator(hostEmulador, puertoAuthEmulador);
+        }
+        return auth;
+      }();
 
   @override
   Future<String> crear(String email, String contrasena) async {
-    // Una app 'alta' que sobreviva a un intento anterior caído se elimina.
-    for (final app
-        in Firebase.apps.where((a) => a.name == _nombreApp).toList()) {
-      await app.delete();
-    }
-    final secundaria = await Firebase.initializeApp(
-      name: _nombreApp,
-      options: opcionesFirebase(),
-    );
+    final Future<FirebaseAuth> pendiente = _authSecundaria();
+    final FirebaseAuth auth;
     try {
-      final auth = FirebaseAuth.instanceFor(app: secundaria);
-      if (usarEmulador) {
-        await auth.useAuthEmulator(hostEmulador, puertoAuthEmulador);
-      }
+      auth = await pendiente;
+    } catch (_) {
+      _auth = null; // permite reintentar la inicialización
+      rethrow;
+    }
+    try {
       final cred = await auth.createUserWithEmailAndPassword(
         email: email,
         password: contrasena,
       );
-      final uid = cred.user!.uid;
-      await auth.signOut();
-      return uid;
+      return cred.user!.uid;
     } finally {
-      await secundaria.delete();
+      if (auth.currentUser != null) await auth.signOut();
     }
   }
 }
