@@ -3,3 +3,7 @@
 .superpowers/
 app/build/
 app/.dart_tool/
+
+# Logs de Firebase
+firebase-debug.log
+*-debug.log
