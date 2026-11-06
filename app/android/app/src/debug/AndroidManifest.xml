@@ -1,0 +1,19 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- The INTERNET permission is required for development. Specifically,
+         the Flutter tool needs it to communicate with the running application
+         to allow setting breakpoints, to provide hot reload, etc.
+    -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Permite HTTP hacia los emuladores locales de Firebase (solo depuración). -->
+    <application android:networkSecurityConfig="@xml/network_security_config">
+        <!-- Sin esto, Android crea la app de Firebase por defecto desde
+             google-services.json (proyecto tapiceria-app) antes de que Dart
+             la inicialice, y en modo emulador se ignoraría demo-tapiceria.
+             La inicialización la hace inicializarFirebase() desde Dart. -->
+        <provider
+            android:name="com.google.firebase.provider.FirebaseInitProvider"
+            android:authorities="${applicationId}.firebaseinitprovider"
+            tools:node="remove"/>
+    </application>
+</manifest>

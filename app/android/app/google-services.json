@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "360321336677",
+    "project_id": "tapiceria-app",
+    "storage_bucket": "tapiceria-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:360321336677:android:23a3256f032e829dfc8d8c",
+        "android_client_info": {
+          "package_name": "mx.tapiceria.gestion"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyClQO1ROmr9HsmmDxvvJOuEeG4QFsMVbqI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
