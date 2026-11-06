@@ -1,0 +1,5 @@
+# Archivos locales
+*.docx
+.superpowers/
+app/build/
+app/.dart_tool/
