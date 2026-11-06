@@ -16,16 +16,29 @@ class Usuario {
   });
 
   factory Usuario.desdeMapa(String uid, Map<String, dynamic> mapa) {
-    final rol = Rol.values.where((r) => r.name == mapa['rol']);
+    String texto(String campo) {
+      final v = mapa[campo];
+      if (v is! String) {
+        throw FormatException('Campo "$campo" ausente o no es texto: $v');
+      }
+      return v;
+    }
+
+    final activo = mapa['activo'];
+    if (activo is! bool) {
+      throw FormatException('Campo "activo" ausente o no es booleano: $activo');
+    }
+    final nombreRol = texto('rol');
+    final rol = Rol.values.where((r) => r.name == nombreRol);
     if (rol.isEmpty) {
-      throw FormatException('Rol desconocido: ${mapa['rol']}');
+      throw FormatException('Rol desconocido: $nombreRol');
     }
     return Usuario(
       uid: uid,
-      nombre: mapa['nombre'] as String,
-      email: mapa['email'] as String,
+      nombre: texto('nombre'),
+      email: texto('email'),
       rol: rol.first,
-      activo: mapa['activo'] as bool,
+      activo: activo,
     );
   }
 

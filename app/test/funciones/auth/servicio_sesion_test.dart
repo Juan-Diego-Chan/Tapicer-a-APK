@@ -93,6 +93,33 @@ void main() {
     );
   });
 
+  test('doc con rol invalido emite CuentaSinConfigurar', () async {
+    await db.doc('usuarios/u1').set({
+      'nombre': 'Ana',
+      'email': 'a@x.mx',
+      'rol': 'jefe',
+      'activo': true,
+    });
+    final s = ServicioSesion(authCon(), repo);
+    expect(await s.estado().firstWhere((e) => e is! CargandoSesion),
+        isA<CuentaSinConfigurar>());
+  });
+
+  test('error permission-denied del stream del doc emite CuentaDesactivada',
+      () async {
+    final s = ServicioSesion(authCon(), _RepoConError(db));
+    expect(await s.estado().firstWhere((e) => e is! CargandoSesion),
+        isA<CuentaDesactivada>());
+  });
+
+  test('estadoParaErrorDeDoc: otros errores no se traducen', () {
+    expect(estadoParaErrorDeDoc(StateError('x')), isNull);
+    expect(
+        estadoParaErrorDeDoc(
+            FirebaseException(plugin: 'cloud_firestore', code: 'unavailable')),
+        isNull);
+  });
+
   group('mensajeErrorAuth', () {
     test('traducciones', () {
       expect(mensajeErrorAuth('invalid-credential'),
@@ -110,4 +137,12 @@ void main() {
       expect(mensajeErrorAuth('otro'), 'Ocurrió un error. Intenta de nuevo.');
     });
   });
+}
+
+class _RepoConError extends RepositorioUsuarios {
+  _RepoConError(super.db);
+
+  @override
+  Stream<Usuario?> observar(String uid) => Stream.error(
+      FirebaseException(plugin: 'cloud_firestore', code: 'permission-denied'));
 }

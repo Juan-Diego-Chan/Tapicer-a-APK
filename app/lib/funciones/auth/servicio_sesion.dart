@@ -56,6 +56,17 @@ String mensajeErrorAuth(String codigo) {
   }
 }
 
+/// Traduce un error del stream del documento de usuario a un estado.
+/// `permission-denied` (reglas) -> cuenta desactivada; documento mal formado
+/// -> cuenta sin configurar. Otros errores devuelven null (se propagan).
+EstadoSesion? estadoParaErrorDeDoc(Object error) {
+  if (error is FirebaseException && error.code == 'permission-denied') {
+    return const CuentaDesactivada();
+  }
+  if (error is FormatException) return const CuentaSinConfigurar();
+  return null;
+}
+
 class ServicioSesion {
   final FirebaseAuth _auth;
   final RepositorioUsuarios _repo;
@@ -84,11 +95,21 @@ class ServicioSesion {
             salida.add(const CargandoSesion());
             subDoc = _repo.observar(user.uid).listen(
                   (u) => salida.add(_aEstado(u)),
-                  onError: salida.addError,
+                  onError: (Object e, StackTrace st) {
+                    final estado = estadoParaErrorDeDoc(e);
+                    if (estado != null) {
+                      salida.add(estado);
+                    } else {
+                      salida.addError(e, st);
+                    }
+                  },
                 );
           },
           onError: salida.addError,
-          onDone: () => salida.close(),
+          onDone: () async {
+            await subDoc?.cancel();
+            await salida.close();
+          },
         );
       },
       onCancel: () async {

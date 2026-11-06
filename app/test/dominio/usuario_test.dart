@@ -39,4 +39,24 @@ void main() {
     expect(v.rol, Rol.dueno);
     expect(v.activo, false);
   });
+
+  test('activo ausente lanza FormatException', () {
+    expect(
+      () => Usuario.desdeMapa(
+          'u1', {'nombre': 'Ana', 'email': 'a@x.mx', 'rol': 'empleado'}),
+      throwsFormatException,
+    );
+  });
+
+  test('nombre que no es texto lanza FormatException', () {
+    expect(
+      () => Usuario.desdeMapa('u1', {
+        'nombre': 5,
+        'email': 'a@x.mx',
+        'rol': 'empleado',
+        'activo': true,
+      }),
+      throwsFormatException,
+    );
+  });
 }
