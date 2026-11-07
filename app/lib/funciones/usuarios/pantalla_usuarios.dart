@@ -6,19 +6,8 @@ import '../../nucleo/formatos.dart';
 import '../auth/providers.dart';
 import '../auth/servicio_sesion.dart';
 import 'dialogo_alta_empleado.dart';
+import 'providers.dart';
 import 'servicio_alta_usuario.dart';
-
-final _usuariosProvider = StreamProvider.autoDispose<List<Usuario>>(
-  (ref) => ref.watch(repositorioUsuariosProvider).observarTodos(),
-);
-
-final _sueldoProvider = StreamProvider.autoDispose.family<double?, String>(
-  (ref, uid) => ref.watch(repositorioPrivadoProvider).observarSueldo(uid),
-);
-
-final _diasLaboralesProvider = StreamProvider.autoDispose<int>(
-  (ref) => ref.watch(repositorioPrivadoProvider).observarDiasLaborales(),
-);
 
 class PantallaUsuarios extends ConsumerWidget {
   const PantallaUsuarios({super.key});
@@ -67,7 +56,7 @@ class PantallaUsuarios extends ConsumerWidget {
       SesionActiva(:final usuario) => usuario.uid,
       _ => null,
     };
-    final usuarios = ref.watch(_usuariosProvider);
+    final usuarios = ref.watch(usuariosProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Usuarios')),
@@ -129,7 +118,7 @@ class _FilaUsuario extends ConsumerWidget {
     final esDueno = usuario.rol == Rol.dueno;
     String? sueldo;
     if (!esDueno) {
-      final s = ref.watch(_sueldoProvider(usuario.uid)).value;
+      final s = ref.watch(sueldoProvider(usuario.uid)).value;
       sueldo = s == null ? 'Sin sueldo' : formatearDinero(s);
     }
     return ListTile(
@@ -169,7 +158,7 @@ class _CampoDiasLaboralesState extends ConsumerState<_CampoDiasLaborales> {
   @override
   void initState() {
     super.initState();
-    ref.listenManual<AsyncValue<int>>(_diasLaboralesProvider, (_, nuevo) {
+    ref.listenManual<AsyncValue<int>>(diasLaboralesProvider, (_, nuevo) {
       final v = nuevo.value;
       if (v != null) _controlador.text = v.toString();
     }, fireImmediately: true);

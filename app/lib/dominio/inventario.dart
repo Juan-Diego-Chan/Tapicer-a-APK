@@ -1,3 +1,5 @@
+import 'lectura.dart';
+
 enum Categoria {
   tela('Tela'),
   espuma('Espuma'),
@@ -35,30 +37,6 @@ enum Unidad {
   }
 }
 
-String _texto(Map<String, dynamic> mapa, String campo) {
-  final v = mapa[campo];
-  if (v is! String) {
-    throw FormatException('Campo "$campo" ausente o no es texto: $v');
-  }
-  return v;
-}
-
-double _numero(Map<String, dynamic> mapa, String campo) {
-  final v = mapa[campo];
-  if (v is! num || !v.isFinite) {
-    throw FormatException('Campo "$campo" ausente o no es número finito: $v');
-  }
-  return v.toDouble();
-}
-
-bool _booleano(Map<String, dynamic> mapa, String campo) {
-  final v = mapa[campo];
-  if (v is! bool) {
-    throw FormatException('Campo "$campo" ausente o no es booleano: $v');
-  }
-  return v;
-}
-
 class Material {
   final String id;
   final String nombre;
@@ -83,13 +61,13 @@ class Material {
   factory Material.desdeMapa(String id, Map<String, dynamic> mapa) {
     return Material(
       id: id,
-      nombre: _texto(mapa, 'nombre'),
-      categoria: Categoria.desdeTexto(_texto(mapa, 'categoria')),
-      unidad: Unidad.desdeTexto(_texto(mapa, 'unidad')),
-      stockMinimo: _numero(mapa, 'stockMinimo'),
-      existencia: _numero(mapa, 'existencia'),
-      usaRollos: _booleano(mapa, 'usaRollos'),
-      marcadoAgotandose: _booleano(mapa, 'marcadoAgotandose'),
+      nombre: leerTexto(mapa, 'nombre'),
+      categoria: Categoria.desdeTexto(leerTexto(mapa, 'categoria')),
+      unidad: Unidad.desdeTexto(leerTexto(mapa, 'unidad')),
+      stockMinimo: leerNumero(mapa, 'stockMinimo'),
+      existencia: leerNumero(mapa, 'existencia'),
+      usaRollos: leerBooleano(mapa, 'usaRollos'),
+      marcadoAgotandose: leerBooleano(mapa, 'marcadoAgotandose'),
     );
   }
 
@@ -132,10 +110,10 @@ class Rollo {
       String id, Map<String, dynamic> mapa, DateTime fechaCompra) {
     return Rollo(
       id: id,
-      materialId: _texto(mapa, 'materialId'),
-      codigo: _texto(mapa, 'codigo'),
-      cantidadInicial: _numero(mapa, 'cantidadInicial'),
-      existencia: _numero(mapa, 'existencia'),
+      materialId: leerTexto(mapa, 'materialId'),
+      codigo: leerTexto(mapa, 'codigo'),
+      cantidadInicial: leerNumero(mapa, 'cantidadInicial'),
+      existencia: leerNumero(mapa, 'existencia'),
       fechaCompra: fechaCompra,
     );
   }
@@ -165,7 +143,7 @@ class Movimiento {
   /// [fecha] llega ya convertida a [DateTime].
   factory Movimiento.desdeMapa(
       String id, Map<String, dynamic> mapa, DateTime fecha) {
-    final nombreTipo = _texto(mapa, 'tipo');
+    final nombreTipo = leerTexto(mapa, 'tipo');
     final tipo = TipoMovimiento.values.where((t) => t.name == nombreTipo);
     if (tipo.isEmpty) {
       throw FormatException('Tipo de movimiento desconocido: $nombreTipo');
@@ -177,10 +155,10 @@ class Movimiento {
     return Movimiento(
       id: id,
       tipo: tipo.first,
-      materialId: _texto(mapa, 'materialId'),
+      materialId: leerTexto(mapa, 'materialId'),
       rolloId: rolloId as String?,
-      cantidad: _numero(mapa, 'cantidad'),
-      usuarioId: _texto(mapa, 'usuarioId'),
+      cantidad: leerNumero(mapa, 'cantidad'),
+      usuarioId: leerTexto(mapa, 'usuarioId'),
       fecha: fecha,
     );
   }

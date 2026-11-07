@@ -90,12 +90,74 @@ service cloud.firestore {
         && d.fecha is timestamp;
     }
 
+    // ---- Consumo de material y días trabajados ----
+    // Línea de material usado en un mueble (pedidos/{p}/muebles/{m}/materiales/{l}).
+    function lineaValida(d) {
+      return d.keys().hasOnly(['materialId', 'rolloId', 'cantidad', 'delCliente', 'usuarioId', 'fecha'])
+        && d.materialId is string
+        && (d.rolloId == null || d.rolloId is string)
+        && d.cantidad is number && d.cantidad > 0 && d.cantidad < 1000000
+        && d.delCliente is bool
+        && d.usuarioId == request.auth.uid
+        && d.fecha is timestamp;
+    }
+
+    // Días: múltiplos de 0.5, > 0 y <= 7.
+    function diaValido(d) {
+      return d.keys().hasOnly(['usuarioId', 'dias', 'fecha'])
+        && d.usuarioId is string
+        && d.dias is number && d.dias > 0 && d.dias <= 7
+        && math.floor(d.dias * 2) == d.dias * 2
+        && d.fecha is timestamp;
+    }
+
+    // La línea {l} y su movimiento de consumo comparten id y cada uno exige al otro.
+    // Lado de la línea: el movimiento se crea en este mismo lote (no se reutiliza
+    // el de una línea borrada) y coincide en material, rollo, cantidad y destino.
+    function consumoEnlazado(p, m, l) {
+      let d = request.resource.data;
+      let ruta = /databases/$(database)/documents/movimientos/$(l);
+      let mov = getAfter(ruta).data;
+      return !exists(ruta)
+        && mov.tipo == 'consumo'
+        && mov.materialId == d.materialId
+        && mov.get('rolloId', null) == d.rolloId
+        && mov.cantidad == -d.cantidad
+        && mov.pedidoId == p
+        && mov.muebleId == m;
+    }
+
+    // Lado del movimiento: existe (tras el lote) una línea con el mismo id, no del
+    // cliente, en el pedido/mueble que indica, y con los mismos datos.
+    function consumoDeLinea(id, d) {
+      let linea = getAfter(/databases/$(database)/documents/pedidos/$(d.pedidoId)/muebles/$(d.muebleId)/materiales/$(id)).data;
+      return movimientoValido(d)
+        && d.tipo == 'consumo'
+        && d.cantidad < 0
+        && d.pedidoId is string
+        && d.muebleId is string
+        && linea.delCliente == false
+        && linea.materialId == d.materialId
+        && linea.rolloId == d.get('rolloId', null)
+        && linea.cantidad == -d.cantidad;
+    }
+
+    // Solo para update: la existencia baja (consumo del empleado) y sigue acotada.
+    // No se puede ligar el monto a un movimiento; se acepta (ver plan 3, tarea 4).
+    function soloBajaExistencia() {
+      return soloCambia(['existencia'])
+        && request.resource.data.existencia is number
+        && request.resource.data.existencia > -1000000000000000
+        && request.resource.data.existencia < resource.data.existencia;
+    }
+
     match /materiales/{id} {
       allow read: if activo();
       allow create: if esDueno() && materialValido(request.resource.data);
       allow update: if (esDueno() && materialValido(request.resource.data))
         || (esEmpleado() && soloCambia(['marcadoAgotandose'])
-          && request.resource.data.marcadoAgotandose == true);
+          && request.resource.data.marcadoAgotandose == true)
+        || (esEmpleado() && soloBajaExistencia());
       allow delete: if esDueno();
     }
 
@@ -105,7 +167,9 @@ service cloud.firestore {
 
     match /rollos/{id} {
       allow read: if activo();
-      allow create, update: if esDueno() && rolloValido(request.resource.data);
+      allow create: if esDueno() && rolloValido(request.resource.data);
+      allow update: if (esDueno() && rolloValido(request.resource.data))
+        || (esEmpleado() && soloBajaExistencia());
       allow delete: if esDueno();
     }
 
@@ -120,8 +184,207 @@ service cloud.firestore {
     // Inmutables: las correcciones se hacen con un ajuste (nuevo movimiento).
     match /movimientos/{id} {
       allow read: if activo();
-      allow create: if esDueno() && movimientoValido(request.resource.data);
+      allow create: if (esDueno() && movimientoValido(request.resource.data))
+        || (activo() && consumoDeLinea(id, request.resource.data));
       allow update, delete: if false;
+    }
+
+    // ---- Clientes, pedidos, muebles, precios y plantillas ----
+    // Acotado: rechaza negativos, NaN (NaN >= 0 es false) e Infinity.
+    function dinero(v) {
+      return v is number && v >= 0 && v < 1000000000;
+    }
+
+    function textoHasta(v, max) {
+      return v is string && v.size() <= max;
+    }
+
+    function textoEntre(v, min, max) {
+      return v is string && v.size() >= min && v.size() <= max;
+    }
+
+    function estadoValido(e) {
+      return e in ['recibido', 'en_proceso', 'terminado', 'entregado', 'cancelado'];
+    }
+
+    function nuloOTexto(v) {
+      return v == null || v is string;
+    }
+
+    function nuloOFecha(v) {
+      return v == null || v is timestamp;
+    }
+
+    function clienteValido(d) {
+      return d.keys().hasOnly(['nombre', 'telefono', 'direccion'])
+        && textoEntre(d.nombre, 1, 100)
+        && textoHasta(d.telefono, 30)
+        && textoHasta(d.direccion, 200);
+    }
+
+    function pedidoValido(d) {
+      return d.keys().hasOnly(['folio', 'clienteId', 'cliente', 'entrega', 'envio', 'comentarios',
+          'fechaIngreso', 'fechaEstimada', 'fechaTerminado', 'fechaEntregado', 'estado', 'creadoPor',
+          'ultimoCambioId'])
+        && textoEntre(d.folio, 1, 20)
+        && d.clienteId is string
+        && clienteValido(d.cliente)
+        && d.entrega in ['recoge', 'domicilio']
+        && dinero(d.envio)
+        && textoHasta(d.comentarios, 1000)
+        && d.fechaIngreso is timestamp
+        && d.fechaEstimada is timestamp
+        && nuloOFecha(d.fechaTerminado)
+        && nuloOFecha(d.fechaEntregado)
+        && estadoValido(d.estado)
+        && d.creadoPor is string
+        && nuloOTexto(d.ultimoCambioId);
+    }
+
+    function muebleValido(d) {
+      return d.keys().hasOnly(['tipoTrabajo', 'tipoMueble', 'plantillaId', 'precio', 'comentarios',
+          'estado', 'ultimoCambioId'])
+        && d.tipoTrabajo in ['fabricacion', 'reparacion']
+        && textoEntre(d.tipoMueble, 1, 100)
+        && nuloOTexto(d.plantillaId)
+        && dinero(d.precio)
+        && textoHasta(d.comentarios, 1000)
+        && estadoValido(d.estado)
+        && nuloOTexto(d.ultimoCambioId);
+    }
+
+    function cambioValido(d) {
+      return d.keys().hasOnly(['campo', 'muebleId', 'anterior', 'nuevo', 'motivo', 'usuarioId', 'fecha'])
+        && ((d.campo == 'precio' && d.muebleId is string)
+          || (d.campo == 'envio' && d.muebleId == null))
+        && dinero(d.anterior)
+        && dinero(d.nuevo)
+        && d.anterior != d.nuevo
+        && (d.motivo == null || textoHasta(d.motivo, 200))
+        && d.usuarioId == request.auth.uid
+        && d.fecha == request.time;
+    }
+
+    function plantillaValida(d) {
+      return d.keys().hasOnly(['tipoMueble', 'lineas'])
+        && textoEntre(d.tipoMueble, 1, 100)
+        && d.lineas is list && d.lineas.size() <= 50;
+    }
+
+    // Registro de cambio de precio que acompaña a la escritura (en el mismo lote).
+    // Si el nuevo ultimoCambioId es null, la ruta falla y se deniega.
+    function registroDe(p) {
+      return getAfter(/databases/$(database)/documents/pedidos/$(p)/cambios_precio/$(request.resource.data.ultimoCambioId)).data;
+    }
+
+    function cambioRegistrado(p, campo) {
+      return request.resource.data.ultimoCambioId != resource.data.get('ultimoCambioId', null)
+        // El registro debe crearse en este mismo lote (no se reutiliza uno viejo).
+        && !exists(/databases/$(database)/documents/pedidos/$(p)/cambios_precio/$(request.resource.data.ultimoCambioId))
+        && registroDe(p).campo == campo
+        && registroDe(p).anterior == resource.data[campo]
+        && registroDe(p).nuevo == request.resource.data[campo]
+        && registroDe(p).usuarioId == request.auth.uid;
+    }
+
+    // Aplica también al dueño: ningún cambio de precio pasa sin quedar registrado.
+    function envioRegistrado(p) {
+      return request.resource.data.envio == resource.data.envio
+        || cambioRegistrado(p, 'envio');
+    }
+
+    function precioRegistrado(p, m) {
+      return request.resource.data.precio == resource.data.precio
+        || (cambioRegistrado(p, 'precio') && registroDe(p).muebleId == m);
+    }
+
+    function cambioReal(ruta, campo, c) {
+      return getAfter(ruta).data.ultimoCambioId == c
+        && get(ruta).data[campo] == request.resource.data.anterior
+        && getAfter(ruta).data[campo] == request.resource.data.nuevo;
+    }
+
+    match /clientes/{id} {
+      allow read: if activo();
+      allow create, update: if activo() && clienteValido(request.resource.data);
+      allow delete: if esDueno();
+    }
+
+    match /pedidos/{p} {
+      allow read: if activo();
+      allow create: if activo()
+        && pedidoValido(request.resource.data)
+        && request.resource.data.creadoPor == request.auth.uid
+        && request.resource.data.ultimoCambioId == null
+        && request.resource.data.fechaTerminado == null
+        && request.resource.data.fechaEntregado == null;
+      allow update: if pedidoValido(request.resource.data)
+        && envioRegistrado(p)
+        && (esDueno()
+          || (esEmpleado() && soloCambia(['entrega', 'envio', 'comentarios', 'fechaEstimada',
+              'fechaTerminado', 'fechaEntregado', 'estado', 'ultimoCambioId'])));
+      allow delete: if esDueno();
+
+      match /muebles/{m} {
+        allow read: if activo();
+        allow create: if activo()
+          && muebleValido(request.resource.data)
+          && request.resource.data.ultimoCambioId == null
+          && request.resource.data.estado == 'recibido'
+          && existsAfter(/databases/$(database)/documents/pedidos/$(p));
+        allow update: if muebleValido(request.resource.data)
+          && precioRegistrado(p, m)
+          && (esDueno()
+            || (esEmpleado() && soloCambia(['precio', 'comentarios', 'estado', 'ultimoCambioId'])));
+        allow delete: if esDueno();
+
+        // Material usado. Inmutable; el dueño la borra junto con un ajuste.
+        match /materiales/{l} {
+          allow read: if activo();
+          allow create: if activo()
+            && lineaValida(request.resource.data)
+            && existsAfter(/databases/$(database)/documents/pedidos/$(p)/muebles/$(m))
+            && (request.resource.data.delCliente == true || consumoEnlazado(p, m, l));
+          allow update: if false;
+          allow delete: if esDueno();
+        }
+
+        // Días trabajados. El empleado solo registra los suyos; el dueño, los de cualquiera.
+        match /dias/{d} {
+          allow read: if activo();
+          allow create: if activo()
+            && diaValido(request.resource.data)
+            && existsAfter(/databases/$(database)/documents/pedidos/$(p)/muebles/$(m))
+            && (request.resource.data.usuarioId == request.auth.uid || esDueno());
+          allow update: if false;
+          allow delete: if esDueno();
+        }
+      }
+
+      // Historial de precios: solo el dueño lo lee; inmutable.
+      match /cambios_precio/{c} {
+        allow read: if esDueno();
+        // El registro debe corresponder a un cambio real en el documento afectado
+        // (antes == anterior, después == nuevo) que lo apunta con ultimoCambioId.
+        allow create: if activo()
+          && cambioValido(request.resource.data)
+          && ((request.resource.data.campo == 'envio'
+              && cambioReal(/databases/$(database)/documents/pedidos/$(p), 'envio', c))
+            || (request.resource.data.campo == 'precio'
+              && cambioReal(/databases/$(database)/documents/pedidos/$(p)/muebles/$(request.resource.data.muebleId), 'precio', c)));
+        allow update, delete: if false;
+      }
+    }
+
+    // Consulta de grupo (Fabricación / Reparación).
+    match /{ruta=**}/muebles/{m} {
+      allow read: if activo();
+    }
+
+    match /plantillas/{id} {
+      allow read: if activo();
+      allow create, update: if esDueno() && plantillaValida(request.resource.data);
+      allow delete: if esDueno();
     }
 
     // Todo lo demas, denegado.

@@ -64,7 +64,8 @@ node firebase/semilla_emulador.mjs
 ```
 
 El script es idempotente y, además del dueño, crea un empleado de prueba y dos
-materiales (Tela lino gris con el rollo #1, y Guata). Los correos y las
+materiales (Tela lino gris con el rollo #1, y Guata), una plantilla (Sillón 3
+plazas), un cliente (María López) y un pedido de ejemplo con un mueble. Los correos y las
 contraseñas de prueba están en ese archivo. También puedes
 hacerlo a mano en la Emulator UI (http://localhost:4000, proyecto
 `demo-tapiceria`): crea el usuario en Authentication y el documento
@@ -103,6 +104,17 @@ demás empleados desde la app.
 - Los costos viven en `materiales_costos` y `rollos_costos`, que solo lee el dueño; el empleado no los ve.
 - Un material entra a la lista de compras si su existencia está por debajo del mínimo, o si un empleado lo marca como "se está acabando".
 - Registrar una compra quita esa marca; sale de la lista si la existencia ya no está por debajo del mínimo.
+
+## Pedidos
+
+- Un pedido tiene uno o varios muebles (fabricación o reparación); el estado del pedido es el del mueble menos avanzado, sin contar los cancelados.
+- Los cambios de precio y de envío quedan en un historial que solo ve el dueño.
+- Las líneas de material descuentan inventario con un movimiento de consumo, salvo las que trajo el cliente.
+- Los días trabajados suman mano de obra: sueldo semanal del empleado entre los días laborales.
+- Solo el dueño borra líneas y días; borrar una línea regresa el material al inventario.
+- Los costos del mueble (materiales y mano de obra) son solo para el dueño, y marcan "(incompleto)" si falta algún costo.
+- Fabricación y Reparación listan los muebles activos por fecha estimada de entrega.
+- Límites conocidos: un empleado que escriba directo contra Firestore (saltándose la app) puede bajar existencias de más o registrar un consumo sin su descuento; nunca puede subirlas ni ver costos. Cancelar un mueble y agregar otro no deja registro en el historial de precios (se revisará en el Plan 4).
 
 ## Despliegue de reglas
 
