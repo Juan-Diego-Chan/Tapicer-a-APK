@@ -30,6 +30,7 @@ void main() {
     }
     expect(redirigir(emp, '/usuarios/x'), '/');
     expect(redirigir(emp, '/pedidos'), isNull);
+    expect(redirigir(emp, '/pedidos/p1/muebles/m1'), isNull);
   });
   test('empleado entra a inventario y su detalle', () {
     final emp = _sesion(Rol.empleado);

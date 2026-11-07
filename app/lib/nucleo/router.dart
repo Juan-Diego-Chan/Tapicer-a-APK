@@ -11,6 +11,7 @@ import '../funciones/compras/pantalla_lista_compras.dart';
 import '../funciones/inicio/pantalla_inicio.dart';
 import '../funciones/inventario/pantalla_inventario.dart';
 import '../funciones/inventario/pantalla_material.dart';
+import '../funciones/pedidos/pantalla_mueble.dart';
 import '../funciones/pedidos/pantalla_nuevo_pedido.dart';
 import '../funciones/pedidos/pantalla_pedido.dart';
 import '../funciones/pedidos/pantalla_pedidos.dart';
@@ -104,6 +105,15 @@ GoRouter crearRouter(Ref ref) {
           GoRoute(
             path: ':id',
             builder: (_, s) => PantallaPedido(pedidoId: s.pathParameters['id']!),
+            routes: [
+              GoRoute(
+                path: 'muebles/:muebleId',
+                builder: (_, s) => PantallaMueble(
+                  pedidoId: s.pathParameters['id']!,
+                  muebleId: s.pathParameters['muebleId']!,
+                ),
+              ),
+            ],
           ),
         ],
       ),
