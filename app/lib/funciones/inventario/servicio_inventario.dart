@@ -15,8 +15,10 @@ class ServicioInventario {
     String? codigoRollo,
     DateTime? fecha,
   }) async {
-    if (cantidad <= 0) throw ArgumentError('La cantidad debe ser mayor a 0');
-    if (precioTotal < 0) throw ArgumentError('El precio no puede ser negativo');
+    if (!cantidad.isFinite || cantidad <= 0) {
+      throw ArgumentError('La cantidad debe ser un número mayor a 0');
+    }
+    if (!precioTotal.isFinite || precioTotal < 0) throw ArgumentError('El precio no puede ser negativo');
     return _entrada(
       tipo: 'compra',
       material: material,
@@ -34,8 +36,11 @@ class ServicioInventario {
     String? codigoRollo,
     DateTime? fecha,
   }) async {
-    if (cantidad <= 0) throw ArgumentError('La cantidad debe ser mayor a 0');
-    if (costoPorUnidad != null && costoPorUnidad < 0) {
+    if (!cantidad.isFinite || cantidad <= 0) {
+      throw ArgumentError('La cantidad debe ser un número mayor a 0');
+    }
+    if (costoPorUnidad != null &&
+        (!costoPorUnidad.isFinite || costoPorUnidad < 0)) {
       throw ArgumentError('El costo no puede ser negativo');
     }
     return _entrada(
@@ -53,7 +58,7 @@ class ServicioInventario {
     required double cantidad,
     String? rolloId,
   }) async {
-    if (cantidad == 0) throw ArgumentError('El ajuste no puede ser 0');
+    if (!cantidad.isFinite || cantidad == 0) throw ArgumentError('El ajuste no puede ser 0');
     if (material.usaRollos && rolloId == null) {
       throw ArgumentError('Falta el rollo del ajuste');
     }
@@ -87,6 +92,12 @@ class ServicioInventario {
     if (esTela && (codigoRollo == null || codigoRollo.trim().isEmpty)) {
       throw ArgumentError('Falta el código del rollo');
     }
+    if (esTela && codigoRollo!.trim().length > 20) {
+      throw ArgumentError('El código del rollo es demasiado largo');
+    }
+    if (esTela && codigoRollo!.trim().length > 20) {
+      throw ArgumentError('El código del rollo es demasiado largo');
+    }
     final momento = Timestamp.fromDate(fecha ?? DateTime.now());
     final batch = _db.batch();
 
@@ -96,7 +107,7 @@ class ServicioInventario {
       rolloId = rolloRef.id;
       batch.set(rolloRef, {
         'materialId': material.id,
-        'codigo': codigoRollo,
+        'codigo': codigoRollo!.trim(),
         'cantidadInicial': cantidad,
         'existencia': cantidad,
         'fechaCompra': momento,

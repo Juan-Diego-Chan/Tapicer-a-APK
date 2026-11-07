@@ -1,5 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tapiceria/funciones/auth/providers.dart';
+import 'package:tapiceria/funciones/auth/servicio_sesion.dart';
+import 'package:tapiceria/funciones/inventario/providers.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tapiceria/datos/repositorio_costos.dart';
 import 'package:tapiceria/datos/repositorio_inventario.dart';
@@ -153,5 +157,60 @@ void main() {
       expect((await db.collection(c).get()).docs, isEmpty, reason: c);
     }
     expect((await mat(g.id))['existencia'], 0);
+  });
+
+  test('valores no finitos y código largo no escriben nada', () async {
+    final g = await crear('Guata', Categoria.guata, Unidad.kg);
+    final t = await crear('Tela', Categoria.tela, Unidad.m);
+    await expectLater(
+        servicio.registrarCompra(
+            material: g, cantidad: double.nan, precioTotal: 1),
+        throwsArgumentError);
+    await expectLater(
+        servicio.registrarCompra(
+            material: g, cantidad: double.infinity, precioTotal: 1),
+        throwsArgumentError);
+    await expectLater(
+        servicio.registrarCompra(
+            material: g, cantidad: 1, precioTotal: double.nan),
+        throwsArgumentError);
+    await expectLater(
+        servicio.registrarCargaInicial(
+            material: g, cantidad: 1, costoPorUnidad: double.infinity),
+        throwsArgumentError);
+    await expectLater(
+        servicio.registrarAjuste(material: g, cantidad: double.nan),
+        throwsArgumentError);
+    await expectLater(
+        servicio.registrarCompra(
+            material: t,
+            cantidad: 1,
+            precioTotal: 1,
+            codigoRollo: 'x' * 21),
+        throwsArgumentError);
+    for (final c in ['compras', 'movimientos', 'materiales_costos', 'rollos']) {
+      expect((await db.collection(c).get()).docs, isEmpty, reason: c);
+    }
+  });
+
+  test('fechas guardadas como Timestamp', () async {
+    final t = await crear('Tela', Categoria.tela, Unidad.m);
+    await servicio.registrarCompra(
+        material: t, cantidad: 2, precioTotal: 10, codigoRollo: '#1');
+    final r = (await db.collection('rollos').get()).docs.first;
+    final c = (await db.collection('compras').get()).docs.first;
+    expect(r['fechaCompra'], isA<Timestamp>());
+    expect(c['fecha'], isA<Timestamp>());
+  });
+
+  test('servicioInventarioProvider lanza StateError sin sesión activa', () async {
+    final container = ProviderContainer(overrides: [
+      estadoSesionProvider.overrideWith((ref) => Stream.value(const SinSesion())),
+    ]);
+    addTearDown(container.dispose);
+    container.listen(estadoSesionProvider, (_, _) {});
+    await container.read(estadoSesionProvider.future);
+    expect(() => container.read(servicioInventarioProvider),
+        throwsA(predicate((e) => e.toString().contains('Bad state: No hay sesión activa'))));
   });
 }

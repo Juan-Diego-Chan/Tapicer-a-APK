@@ -27,7 +27,12 @@ class RepositorioInventario {
   Stream<Material?> observarMaterial(String id) =>
       _materiales.doc(id).snapshots().map((s) {
         final datos = s.data();
-        return datos == null ? null : Material.desdeMapa(s.id, datos);
+        if (datos == null) return null;
+        try {
+          return Material.desdeMapa(s.id, datos);
+        } on FormatException {
+          return null;
+        }
       });
 
   Stream<List<Rollo>> observarRollos(String materialId) => _db
@@ -89,14 +94,19 @@ class RepositorioInventario {
     required Categoria categoria,
     required Unidad unidad,
     required double stockMinimo,
-  }) =>
-      _materiales.doc(id).update({
+  }) async {
+    if ((categoria == Categoria.tela) !=
+        ((await _materiales.doc(id).get()).data()?['usaRollos'] == true)) {
+      throw ArgumentError('No se puede cambiar la categoría hacia o desde tela');
+    }
+    await _materiales.doc(id).update({
         'nombre': nombre,
         'categoria': categoria.name,
         'unidad': unidad.clave,
         'stockMinimo': stockMinimo,
         'usaRollos': categoria == Categoria.tela,
       });
+  }
 
   Future<void> marcarAgotandose(String id) =>
       _materiales.doc(id).update({'marcadoAgotandose': true});

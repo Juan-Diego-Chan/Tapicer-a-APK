@@ -63,4 +63,31 @@ void main() {
     final d = (await db.collection('materiales').doc(id).get()).data()!;
     expect(d.length, 7);
   });
+
+  test('observarMaterial emite null si el documento está mal formado', () async {
+    await db.collection('materiales').doc('x').set(mapa('Mala', categoria: 'madera'));
+    expect(await repo.observarMaterial('x').first, isNull);
+  });
+
+  test('editarMaterial rechaza cambiar hacia o desde tela', () async {
+    await db.collection('materiales').doc('a').set(mapa('Alfa'));
+    await expectLater(
+        repo.editarMaterial('a',
+            nombre: 'Alfa',
+            categoria: Categoria.tela,
+            unidad: Unidad.m,
+            stockMinimo: 1),
+        throwsArgumentError);
+    await db.collection('materiales').doc('t').set(
+        {...mapa('Tela', categoria: 'tela'), 'usaRollos': true});
+    await expectLater(
+        repo.editarMaterial('t',
+            nombre: 'Tela',
+            categoria: Categoria.otros,
+            unidad: Unidad.m,
+            stockMinimo: 1),
+        throwsArgumentError);
+    final d = (await db.collection('materiales').doc('t').get()).data()!;
+    expect(d['categoria'], 'tela');
+  });
 }
