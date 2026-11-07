@@ -98,7 +98,8 @@ demás empleados desde la app.
 - Cada cambio de existencia es un movimiento (`compra`, `inicial`, `consumo` o `ajuste`) en `movimientos`; la existencia del material y del rollo se actualiza con él.
 - Las telas se llevan por rollo; el resto de los materiales, por existencia total.
 - La existencia puede quedar negativa: un consumo o ajuste nunca se bloquea, se registra y se muestra tal cual.
-- La carga inicial de un material se registra sin costo.
+- La carga inicial puede llevar un costo opcional por unidad; si se deja vacío, el costo queda desconocido y se muestra «Sin costo».
+- Los movimientos no se editan ni se borran; las correcciones se hacen con un ajuste.
 - Los costos viven en `materiales_costos` y `rollos_costos`, que solo lee el dueño; el empleado no los ve.
 - Un material entra a la lista de compras si su existencia está por debajo del mínimo, o si un empleado lo marca como "se está acabando".
 - Registrar una compra quita esa marca; sale de la lista si la existencia ya no está por debajo del mínimo.
