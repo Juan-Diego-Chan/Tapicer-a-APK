@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../datos/repositorio_clientes.dart';
 import '../../datos/repositorio_pedidos.dart';
 import '../../datos/repositorio_plantillas.dart';
+import '../../datos/repositorio_trabajo.dart';
 import '../../dominio/pedidos.dart';
 import '../auth/providers.dart';
 import '../auth/servicio_sesion.dart';
 import 'servicio_pedidos.dart';
+import 'servicio_trabajo.dart';
 
 final repositorioClientesProvider = Provider<RepositorioClientes>(
   (ref) => RepositorioClientes(ref.watch(firestoreProvider)),
@@ -26,6 +28,18 @@ final servicioPedidosProvider = Provider<ServicioPedidos>((ref) {
     throw StateError('No hay sesión activa');
   }
   return ServicioPedidos(ref.watch(firestoreProvider), estado.usuario.uid);
+});
+
+final repositorioTrabajoProvider = Provider<RepositorioTrabajo>(
+  (ref) => RepositorioTrabajo(ref.watch(firestoreProvider)),
+);
+
+final servicioTrabajoProvider = Provider<ServicioTrabajo>((ref) {
+  final estado = ref.watch(estadoSesionProvider).value;
+  if (estado is! SesionActiva) {
+    throw StateError('No hay sesión activa');
+  }
+  return ServicioTrabajo(ref.watch(firestoreProvider), estado.usuario.uid);
 });
 
 final clientesProvider = StreamProvider<List<Cliente>>(
@@ -72,4 +86,18 @@ final cambiosPrecioProvider =
     StreamProvider.autoDispose.family<List<CambioPrecio>, String>(
   (ref, pedidoId) =>
       ref.watch(repositorioPedidosProvider).observarCambiosPrecio(pedidoId),
+);
+
+final lineasProvider = StreamProvider.autoDispose
+    .family<List<LineaMaterial>, ({String pedidoId, String muebleId})>(
+  (ref, k) => ref
+      .watch(repositorioTrabajoProvider)
+      .observarLineas(k.pedidoId, k.muebleId),
+);
+
+final diasProvider = StreamProvider.autoDispose
+    .family<List<DiaTrabajado>, ({String pedidoId, String muebleId})>(
+  (ref, k) => ref
+      .watch(repositorioTrabajoProvider)
+      .observarDias(k.pedidoId, k.muebleId),
 );
