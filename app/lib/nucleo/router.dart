@@ -12,6 +12,8 @@ import '../funciones/inicio/pantalla_inicio.dart';
 import '../funciones/inventario/pantalla_inventario.dart';
 import '../funciones/inventario/pantalla_material.dart';
 import '../funciones/pedidos/pantalla_nuevo_pedido.dart';
+import '../funciones/pedidos/pantalla_pedido.dart';
+import '../funciones/pedidos/pantalla_pedidos.dart';
 import '../funciones/plantillas/pantalla_plantillas.dart';
 import '../funciones/usuarios/pantalla_usuarios.dart';
 import 'pantalla_proximamente.dart';
@@ -27,6 +29,7 @@ const _rutasConPantalla = {
   '/inventario',
   '/compras',
   '/plantillas',
+  '/pedidos',
 };
 
 /// Lógica pura de guardia. Devuelve la ruta destino o null si no hay que
@@ -92,15 +95,17 @@ GoRouter crearRouter(Ref ref) {
         path: '/plantillas',
         builder: (_, _) => const PantallaPlantillas(),
       ),
-      // `nuevo` va antes de `:id` para que no se tome como un id de pedido.
       GoRoute(
-        path: '/pedidos/nuevo',
-        builder: (_, _) => const PantallaNuevoPedido(),
-      ),
-      // Marcador: la Tarea 9 lo reemplaza por el detalle del pedido.
-      GoRoute(
-        path: '/pedidos/:id',
-        builder: (_, _) => const PantallaProximamente(titulo: 'Pedido'),
+        path: '/pedidos',
+        builder: (_, _) => const PantallaPedidos(),
+        routes: [
+          // `nuevo` va antes de `:id` para que no se tome como un id de pedido.
+          GoRoute(path: 'nuevo', builder: (_, _) => const PantallaNuevoPedido()),
+          GoRoute(
+            path: ':id',
+            builder: (_, s) => PantallaPedido(pedidoId: s.pathParameters['id']!),
+          ),
+        ],
       ),
       for (final e in entradasMenu.where(
         (e) => !_rutasConPantalla.contains(e.ruta),
