@@ -11,6 +11,7 @@ import 'dialogo_dias.dart';
 import 'dialogo_linea_material.dart';
 import 'dialogos_pedido.dart';
 import 'providers.dart';
+import 'seccion_plantilla_costos.dart';
 
 class PantallaMueble extends ConsumerWidget {
   const PantallaMueble({
@@ -59,9 +60,6 @@ class _Detalle extends ConsumerWidget {
   final Pedido pedido;
   final List<Mueble> muebles;
   final Mueble mueble;
-
-  /// Hueco que llena la Tarea 11 (plantilla y costos).
-  Widget get seccionPlantillaYCostos => const SizedBox.shrink();
 
   Future<void> _cambiarEstado(
     BuildContext context,
@@ -151,7 +149,7 @@ class _Detalle extends ConsumerWidget {
         _SeccionMateriales(pedidoId: pedido.id, muebleId: mueble.id),
         const Divider(height: 32),
         _SeccionDias(pedidoId: pedido.id, muebleId: mueble.id),
-        seccionPlantillaYCostos,
+        _PlantillaYCostos(pedidoId: pedido.id, mueble: mueble),
       ],
     );
   }
@@ -175,6 +173,21 @@ Future<bool> _confirmar(BuildContext context, String texto) async {
     ),
   );
   return ok == true;
+}
+
+class _PlantillaYCostos extends ConsumerWidget {
+  const _PlantillaYCostos({required this.pedidoId, required this.mueble});
+
+  final String pedidoId;
+  final Mueble mueble;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final clave = (pedidoId: pedidoId, muebleId: mueble.id);
+    final lineas = ref.watch(lineasProvider(clave)).value ?? const [];
+    final dias = ref.watch(diasProvider(clave)).value ?? const [];
+    return SeccionPlantillaYCostos(mueble: mueble, lineas: lineas, dias: dias);
+  }
 }
 
 class _SeccionMateriales extends ConsumerWidget {

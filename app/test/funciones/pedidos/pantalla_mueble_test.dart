@@ -108,8 +108,8 @@ void main() {
     expect(find.textContaining('Sillón'), findsWidgets);
     expect(find.textContaining('260101-P1AB'), findsWidgets);
     expect(find.textContaining('Verde'), findsOneWidget);
-    expect(find.text('Tela'), findsOneWidget);
-    expect(find.textContaining('2.5 m'), findsOneWidget);
+    expect(find.text('Tela'), findsNWidgets(2));
+    expect(find.textContaining('2.5 m'), findsWidgets);
     expect(find.textContaining('Rollo #1'), findsOneWidget);
     expect(find.textContaining('1.5 días'), findsOneWidget);
     expect(find.textContaining('Ana'), findsOneWidget);
