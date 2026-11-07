@@ -197,6 +197,63 @@ describe('cambio de precio', () => {
     await assertSucceeds(b.commit());
   });
 
+  it('registro falso: mover ultimoCambioId sin cambiar el precio falla', async () => {
+    const db = como(env, 'emp1');
+    const b = writeBatch(db);
+    b.set(doc(db, 'pedidos', 'p1', 'cambios_precio', 'fake1'), cambio({ anterior: 650, nuevo: 5 }));
+    b.update(doc(db, 'pedidos', 'p1', 'muebles', 'mu1'), { ultimoCambioId: 'fake1' });
+    await assertFails(b.commit());
+  });
+
+  it('registro falso: mover ultimoCambioId sin cambiar el envío falla', async () => {
+    const db = como(env, 'emp1');
+    const b = writeBatch(db);
+    b.set(
+      doc(db, 'pedidos', 'p1', 'cambios_precio', 'fake2'),
+      cambio({ campo: 'envio', muebleId: null, anterior: 200, nuevo: 0 }),
+    );
+    b.update(doc(db, 'pedidos', 'p1'), { ultimoCambioId: 'fake2' });
+    await assertFails(b.commit());
+  });
+
+  it('reutilizar un registro viejo (A→B→A) falla', async () => {
+    const db = como(env, 'emp1');
+    const mu = doc(db, 'pedidos', 'p1', 'muebles', 'mu1');
+    const a = writeBatch(db);
+    a.set(doc(db, 'pedidos', 'p1', 'cambios_precio', 'A'), cambio({ anterior: 650, nuevo: 600 }));
+    a.update(mu, { precio: 600, ultimoCambioId: 'A' });
+    await assertSucceeds(a.commit());
+    const b = writeBatch(db);
+    b.set(doc(db, 'pedidos', 'p1', 'cambios_precio', 'B'), cambio({ anterior: 600, nuevo: 650 }));
+    b.update(mu, { precio: 650, ultimoCambioId: 'B' });
+    await assertSucceeds(b.commit());
+    await assertFails(updateDoc(mu, { precio: 600, ultimoCambioId: 'A' }));
+  });
+
+  it('registro con fecha atrasada falla', async () => {
+    const db = como(env, 'emp1');
+    const c = doc(collection(db, 'pedidos', 'p1', 'cambios_precio'));
+    const b = writeBatch(db);
+    b.set(c, cambio({ fecha: Timestamp.fromDate(new Date('2020-01-01')) }));
+    b.update(doc(db, 'pedidos', 'p1', 'muebles', 'mu1'), { precio: 600, ultimoCambioId: c.id });
+    await assertFails(b.commit());
+  });
+
+  it('el dueño cambia el precio con su registro', async () => {
+    const db = como(env, 'dueno1');
+    const c = doc(collection(db, 'pedidos', 'p1', 'cambios_precio'));
+    const b = writeBatch(db);
+    b.set(c, cambio({ usuarioId: 'dueno1', motivo: 'Descuento' }));
+    b.update(doc(db, 'pedidos', 'p1', 'muebles', 'mu1'), { precio: 600, ultimoCambioId: c.id });
+    await assertSucceeds(b.commit());
+  });
+
+  it('cambiar precio apuntando a un registro inexistente falla', async () => {
+    await assertFails(
+      updateDoc(doc(como(env, 'emp1'), 'pedidos', 'p1', 'muebles', 'mu1'), { precio: 600, ultimoCambioId: 'noexiste' }),
+    );
+  });
+
   it('cambiar envio sin registro falla', async () => {
     await assertFails(updateDoc(doc(como(env, 'emp1'), 'pedidos', 'p1'), { envio: 0 }));
   });

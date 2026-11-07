@@ -197,7 +197,7 @@ service cloud.firestore {
         && d.anterior != d.nuevo
         && (d.motivo == null || textoHasta(d.motivo, 200))
         && d.usuarioId == request.auth.uid
-        && d.fecha is timestamp;
+        && d.fecha == request.time;
     }
 
     function plantillaValida(d) {
@@ -214,6 +214,8 @@ service cloud.firestore {
 
     function cambioRegistrado(p, campo) {
       return request.resource.data.ultimoCambioId != resource.data.get('ultimoCambioId', null)
+        // El registro debe crearse en este mismo lote (no se reutiliza uno viejo).
+        && !exists(/databases/$(database)/documents/pedidos/$(p)/cambios_precio/$(request.resource.data.ultimoCambioId))
         && registroDe(p).campo == campo
         && registroDe(p).anterior == resource.data[campo]
         && registroDe(p).nuevo == request.resource.data[campo]
@@ -229,6 +231,12 @@ service cloud.firestore {
     function precioRegistrado(p, m) {
       return request.resource.data.precio == resource.data.precio
         || (cambioRegistrado(p, 'precio') && registroDe(p).muebleId == m);
+    }
+
+    function cambioReal(ruta, campo, c) {
+      return getAfter(ruta).data.ultimoCambioId == c
+        && get(ruta).data[campo] == request.resource.data.anterior
+        && getAfter(ruta).data[campo] == request.resource.data.nuevo;
     }
 
     match /clientes/{id} {
@@ -268,12 +276,14 @@ service cloud.firestore {
       // Historial de precios: solo el dueño lo lee; inmutable.
       match /cambios_precio/{c} {
         allow read: if esDueno();
+        // El registro debe corresponder a un cambio real en el documento afectado
+        // (antes == anterior, después == nuevo) que lo apunta con ultimoCambioId.
         allow create: if activo()
           && cambioValido(request.resource.data)
           && ((request.resource.data.campo == 'envio'
-              && getAfter(/databases/$(database)/documents/pedidos/$(p)).data.ultimoCambioId == c)
+              && cambioReal(/databases/$(database)/documents/pedidos/$(p), 'envio', c))
             || (request.resource.data.campo == 'precio'
-              && getAfter(/databases/$(database)/documents/pedidos/$(p)/muebles/$(request.resource.data.muebleId)).data.ultimoCambioId == c));
+              && cambioReal(/databases/$(database)/documents/pedidos/$(p)/muebles/$(request.resource.data.muebleId), 'precio', c)));
         allow update, delete: if false;
       }
     }
