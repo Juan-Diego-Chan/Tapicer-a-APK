@@ -200,4 +200,64 @@ void main() {
     await t.pumpAndSettle();
     expect(find.byType(AlertDialog), findsNothing);
   });
+
+  testWidgets('precio "1,500" se guarda como 1500', (t) async {
+    final db = await _montar(
+        t, _mat('m1', Categoria.espuma, Unidad.kg), TipoCaptura.compra);
+    await _abrir(t);
+    await t.enterText(find.widgetWithText(TextFormField, 'Cantidad (kg)'), '2');
+    await t.enterText(
+        find.widgetWithText(TextFormField, 'Precio total pagado'), '1,500');
+    await t.tap(find.text('Guardar'));
+    await t.pumpAndSettle();
+    final c = (await db.collection('materiales_costos').doc('m1').get()).data()!;
+    expect(c['costoTotalComprado'], 1500);
+  });
+
+  testWidgets('precio 0 o "1,5" muestra error', (t) async {
+    await _montar(
+        t, _mat('m1', Categoria.espuma, Unidad.kg), TipoCaptura.compra);
+    await _abrir(t);
+    await t.enterText(find.widgetWithText(TextFormField, 'Cantidad (kg)'), '1');
+    for (final p in ['0', '1,5', '-3']) {
+      await t.enterText(
+          find.widgetWithText(TextFormField, 'Precio total pagado'), p);
+      await t.tap(find.text('Guardar'));
+      await t.pumpAndSettle();
+      expect(find.text('Escribe el precio pagado'), findsOneWidget, reason: p);
+    }
+  });
+
+  testWidgets('carga inicial con costo 0 muestra error', (t) async {
+    await _montar(
+        t, _mat('m1', Categoria.guata, Unidad.m), TipoCaptura.inicial);
+    await _abrir(t);
+    await t.enterText(find.widgetWithText(TextFormField, 'Cantidad (m)'), '4');
+    await t.enterText(
+        find.widgetWithText(TextFormField, 'Costo por m (opcional)'), '0');
+    await t.tap(find.text('Guardar'));
+    await t.pumpAndSettle();
+    expect(find.text('Escribe un costo mayor a 0, o déjalo vacío'),
+        findsOneWidget);
+  });
+
+  testWidgets('código de rollo largo o repetido muestra error', (t) async {
+    final m = _mat('t1', Categoria.tela, Unidad.m);
+    final db = await _montar(t, m, TipoCaptura.compra);
+    await _rollo(db, '1', 't1', 'R-9', 5);
+    await _abrir(t);
+    await t.enterText(find.widgetWithText(TextFormField, 'Cantidad (m)'), '1');
+    await t.enterText(
+        find.widgetWithText(TextFormField, 'Precio total pagado'), '10');
+    final codigo = find.widgetWithText(TextFormField, 'Código del rollo');
+    await t.enterText(codigo, 'X' * 21);
+    await t.tap(find.text('Guardar'));
+    await t.pumpAndSettle();
+    expect(find.text('Máximo 20 caracteres'), findsOneWidget);
+    await t.enterText(codigo, 'R-9');
+    await t.tap(find.text('Guardar'));
+    await t.pumpAndSettle();
+    expect(find.text('Ese código ya existe'), findsOneWidget);
+    expect((await db.collection('movimientos').get()).docs, isEmpty);
+  });
 }

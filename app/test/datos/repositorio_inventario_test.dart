@@ -32,7 +32,7 @@ void main() {
 
   test('editarMaterial no cambia existencia', () async {
     await db.collection('materiales').doc('a').set({...mapa('Alfa'), 'existencia': 7});
-    await repo.editarMaterial('a',
+    await repo.editarMaterial('a', usaRollosActual: false,
         nombre: 'Beta',
         categoria: Categoria.espuma,
         unidad: Unidad.m,
@@ -72,7 +72,7 @@ void main() {
   test('editarMaterial rechaza cambiar hacia o desde tela', () async {
     await db.collection('materiales').doc('a').set(mapa('Alfa'));
     await expectLater(
-        repo.editarMaterial('a',
+        repo.editarMaterial('a', usaRollosActual: false,
             nombre: 'Alfa',
             categoria: Categoria.tela,
             unidad: Unidad.m,
@@ -81,7 +81,7 @@ void main() {
     await db.collection('materiales').doc('t').set(
         {...mapa('Tela', categoria: 'tela'), 'usaRollos': true});
     await expectLater(
-        repo.editarMaterial('t',
+        repo.editarMaterial('t', usaRollosActual: true,
             nombre: 'Tela',
             categoria: Categoria.otros,
             unidad: Unidad.m,

@@ -103,7 +103,10 @@ class Material {
         'marcadoAgotandose': false,
       };
 
-  bool get necesitaCompra => existencia < stockMinimo || marcadoAgotandose;
+  bool get necesitaCompra =>
+      redondear2(existencia) < redondear2(stockMinimo) || marcadoAgotandose;
+
+  bool get existenciaNegativa => redondear2(existencia) < 0;
 }
 
 class Rollo {
@@ -206,6 +209,26 @@ double? leerCantidad(String texto) {
   if (limpio.isEmpty) return null;
   final valor = double.tryParse(limpio);
   return valor != null && valor.isFinite ? valor : null;
+}
+
+/// Redondea a 2 decimales y normaliza -0 a 0 (evita deriva de punto flotante).
+double redondear2(double v) {
+  final r = (v * 100).roundToDouble() / 100;
+  return r == 0 ? 0.0 : r;
+}
+
+/// Lee dinero en es-MX: la coma agrupa miles ("1,500" = 1500).
+double? leerDinero(String texto) {
+  var t = texto.trim();
+  if (t.startsWith(r'$')) t = t.substring(1);
+  t = t.replaceAll(' ', '');
+  if (RegExp(r'^\d{1,3}(,\d{3})+(\.\d{1,2})?$').hasMatch(t)) {
+    t = t.replaceAll(',', '');
+  } else if (!RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(t)) {
+    return null;
+  }
+  final v = double.tryParse(t);
+  return v != null && v.isFinite ? v : null;
 }
 
 String formatearCantidad(double c, Unidad u) {

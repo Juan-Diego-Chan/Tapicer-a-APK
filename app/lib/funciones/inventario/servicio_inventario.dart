@@ -18,7 +18,9 @@ class ServicioInventario {
     if (!cantidad.isFinite || cantidad <= 0) {
       throw ArgumentError('La cantidad debe ser un número mayor a 0');
     }
-    if (!precioTotal.isFinite || precioTotal < 0) throw ArgumentError('El precio no puede ser negativo');
+    if (!precioTotal.isFinite || precioTotal <= 0) {
+      throw ArgumentError('El precio debe ser mayor a 0');
+    }
     return _entrada(
       tipo: 'compra',
       material: material,
@@ -40,8 +42,8 @@ class ServicioInventario {
       throw ArgumentError('La cantidad debe ser un número mayor a 0');
     }
     if (costoPorUnidad != null &&
-        (!costoPorUnidad.isFinite || costoPorUnidad < 0)) {
-      throw ArgumentError('El costo no puede ser negativo');
+        (!costoPorUnidad.isFinite || costoPorUnidad <= 0)) {
+      throw ArgumentError('El costo debe ser mayor a 0');
     }
     return _entrada(
       tipo: 'inicial',
@@ -91,9 +93,6 @@ class ServicioInventario {
     final esTela = material.usaRollos;
     if (esTela && (codigoRollo == null || codigoRollo.trim().isEmpty)) {
       throw ArgumentError('Falta el código del rollo');
-    }
-    if (esTela && codigoRollo!.trim().length > 20) {
-      throw ArgumentError('El código del rollo es demasiado largo');
     }
     if (esTela && codigoRollo!.trim().length > 20) {
       throw ArgumentError('El código del rollo es demasiado largo');

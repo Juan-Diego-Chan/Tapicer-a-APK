@@ -143,4 +143,24 @@ void main() {
     expect(() => Material.desdeMapa('x', {..._mapaValido(), 'existencia': double.infinity}),
         throwsFormatException);
   });
+
+  test('leerDinero: comas de miles y formatos inválidos', () {
+    expect(leerDinero('1,500'), 1500);
+    expect(leerDinero(r'$1,500.50'), 1500.5);
+    expect(leerDinero('1500'), 1500);
+    expect(leerDinero('300'), 300);
+    expect(leerDinero('12.5'), 12.5);
+    for (final t in ['1,5', 'abc', '1,50,0', '', '1e3', 'NaN']) {
+      expect(leerDinero(t), isNull, reason: t);
+    }
+  });
+
+  test('redondear2 y deriva de punto flotante', () {
+    expect(redondear2(3.3 - 1.1), 2.2);
+    expect(redondear2(-2.8e-17).isNegative, isFalse);
+    expect(_material(existencia: 3.3 - 1.1, stockMinimo: 2.2).necesitaCompra,
+        isFalse);
+    expect(_material(existencia: 0.3 - 0.2 - 0.1).existenciaNegativa, isFalse);
+    expect(_material(existencia: -0.5).existenciaNegativa, isTrue);
+  });
 }

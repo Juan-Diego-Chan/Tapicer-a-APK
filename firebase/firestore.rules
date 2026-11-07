@@ -63,6 +63,8 @@ service cloud.firestore {
         && d.unidad in ['m', 'kg', 'pza', 'l']
         && d.stockMinimo is number && d.stockMinimo >= 0
         && d.existencia is number
+        && d.existencia == d.existencia
+        && d.existencia > -1000000000000000 && d.existencia < 1000000000000000
         && d.usaRollos is bool
         && d.marcadoAgotandose is bool;
     }

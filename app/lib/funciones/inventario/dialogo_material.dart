@@ -77,6 +77,7 @@ class _DialogoMaterialState extends ConsumerState<DialogoMaterial> {
         categoria: _categoria,
         unidad: _unidad,
         stockMinimo: minimo,
+        usaRollosActual: existente.usaRollos,
       );
     }
     // Sin await: sin conexión el Future no termina y el diálogo debe cerrar.
@@ -94,6 +95,7 @@ class _DialogoMaterialState extends ConsumerState<DialogoMaterial> {
   Widget build(BuildContext context) {
     final editando = widget.existente != null;
     final eraTela = widget.existente?.usaRollos == true;
+    final bloqueaUnidad = (widget.existente?.existencia ?? 0) != 0;
     return AlertDialog(
       title: Text(editando ? 'Editar material' : 'Nuevo material'),
       content: SingleChildScrollView(
@@ -135,7 +137,12 @@ class _DialogoMaterialState extends ConsumerState<DialogoMaterial> {
                 key: ValueKey('unidad-$_unidad'),
                 initialValue: _unidad,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Unidad'),
+                decoration: InputDecoration(
+                  labelText: 'Unidad',
+                  helperText: bloqueaUnidad
+                      ? 'No se puede cambiar la unidad con existencia'
+                      : null,
+                ),
                 items: const [
                   DropdownMenuItem(value: Unidad.m, child: Text('Metros (m)')),
                   DropdownMenuItem(value: Unidad.kg, child: Text('Kilos (kg)')),
@@ -143,7 +150,7 @@ class _DialogoMaterialState extends ConsumerState<DialogoMaterial> {
                       value: Unidad.pza, child: Text('Piezas (pza)')),
                   DropdownMenuItem(value: Unidad.l, child: Text('Litros (l)')),
                 ],
-                onChanged: _categoria == Categoria.tela
+                onChanged: (_categoria == Categoria.tela || bloqueaUnidad)
                     ? null
                     : (u) {
                         if (u != null) setState(() => _unidad = u);

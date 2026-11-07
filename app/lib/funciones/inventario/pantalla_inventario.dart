@@ -77,7 +77,7 @@ class _FilaMaterial extends StatelessWidget {
           : null,
       trailing: Text(
         formatearCantidad(material.existencia, material.unidad),
-        style: material.existencia < 0 ? TextStyle(color: error) : null,
+        style: material.existenciaNegativa ? TextStyle(color: error) : null,
       ),
       onTap: () => context.push('/inventario/${material.id}'),
     );

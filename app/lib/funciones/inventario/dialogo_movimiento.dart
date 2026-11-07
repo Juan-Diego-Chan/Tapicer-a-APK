@@ -80,13 +80,15 @@ class _DialogoMovimientoState extends ConsumerState<DialogoMovimiento> {
       TipoCaptura.compra => servicio.registrarCompra(
           material: _m,
           cantidad: cantidad,
-          precioTotal: leerCantidad(_precio.text)!,
+          precioTotal: leerDinero(_precio.text)!,
           codigoRollo: codigo,
         ),
       TipoCaptura.inicial => servicio.registrarCargaInicial(
           material: _m,
           cantidad: cantidad,
-          costoPorUnidad: leerCantidad(_precio.text),
+          costoPorUnidad: _precio.text.trim().isEmpty
+              ? null
+              : leerDinero(_precio.text),
           codigoRollo: codigo,
         ),
       TipoCaptura.ajuste => servicio.registrarAjuste(
@@ -156,8 +158,8 @@ class _DialogoMovimientoState extends ConsumerState<DialogoMovimiento> {
           keyboardType: decimal,
           decoration: const InputDecoration(labelText: 'Precio total pagado'),
           validator: (v) {
-            final n = leerCantidad(v ?? '');
-            return (n == null || n < 0) ? 'Escribe el precio pagado' : null;
+            final n = leerDinero(v ?? '');
+            return (n == null || n <= 0) ? 'Escribe el precio pagado' : null;
           },
         ));
       } else {
@@ -167,8 +169,10 @@ class _DialogoMovimientoState extends ConsumerState<DialogoMovimiento> {
           decoration: InputDecoration(labelText: 'Costo por $_u (opcional)'),
           validator: (v) {
             if ((v ?? '').trim().isEmpty) return null;
-            final n = leerCantidad(v!);
-            return (n == null || n < 0) ? 'Escribe el precio pagado' : null;
+            final n = leerDinero(v!);
+            return (n == null || n <= 0)
+                ? 'Escribe un costo mayor a 0, o déjalo vacío'
+                : null;
           },
         ));
       }
@@ -177,9 +181,14 @@ class _DialogoMovimientoState extends ConsumerState<DialogoMovimiento> {
           controller: _codigo,
           onChanged: (_) => _codigoEditado = true,
           decoration: const InputDecoration(labelText: 'Código del rollo'),
-          validator: (v) => (v == null || v.trim().isEmpty)
-              ? 'Escribe el código del rollo'
-              : null,
+          validator: (v) {
+            final c = (v ?? '').trim();
+            if (c.isEmpty) return 'Escribe el código del rollo';
+            if (c.length > 20) return 'Máximo 20 caracteres';
+            final rollos = ref.read(rollosProvider(_m.id)).value ?? const [];
+            if (rollos.any((r) => r.codigo == c)) return 'Ese código ya existe';
+            return null;
+          },
         ));
       }
     }

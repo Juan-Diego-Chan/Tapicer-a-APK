@@ -94,9 +94,9 @@ class RepositorioInventario {
     required Categoria categoria,
     required Unidad unidad,
     required double stockMinimo,
+    required bool usaRollosActual,
   }) async {
-    if ((categoria == Categoria.tela) !=
-        ((await _materiales.doc(id).get()).data()?['usaRollos'] == true)) {
+    if ((categoria == Categoria.tela) != usaRollosActual) {
       throw ArgumentError('No se puede cambiar la categoría hacia o desde tela');
     }
     await _materiales.doc(id).update({

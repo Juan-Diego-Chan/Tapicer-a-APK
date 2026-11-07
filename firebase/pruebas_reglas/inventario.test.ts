@@ -11,6 +11,7 @@ import {
   setDoc,
   Timestamp,
   updateDoc,
+  writeBatch,
   type Firestore,
 } from 'firebase/firestore';
 import { como, crearEntorno, sembrarUsuario } from './ayuda';
@@ -224,5 +225,88 @@ describe('movimientos', () => {
       await assertFails(updateDoc(doc(db, 'movimientos', 'mv1'), { cantidad: 1 }));
       await assertFails(deleteDoc(doc(db, 'movimientos', 'mv1')));
     }
+  });
+});
+
+describe('material: existencia no finita', () => {
+  it('dueño no escribe existencia NaN', async () => {
+    await assertFails(
+      setDoc(doc(como(env, 'dueno1'), 'materiales', 'nuevo'), material({ existencia: NaN })),
+    );
+  });
+});
+
+describe('lotes reales del servicio', () => {
+
+  it('compra de guata', async () => {
+    const db = como(env, 'dueno1');
+    await sembrar('materiales', 'g1', material({ categoria: 'guata', unidad: 'kg', usaRollos: false, marcadoAgotandose: true }));
+    const b = writeBatch(db);
+    b.update(doc(db, 'materiales', 'g1'), { existencia: increment(10), marcadoAgotandose: false });
+    b.set(
+      doc(db, 'materiales_costos', 'g1'),
+      { cantidadComprada: increment(10), costoTotalComprado: increment(500) },
+      { merge: true },
+    );
+    b.set(doc(collection(db, 'compras')), {
+      materialId: 'g1', rolloId: null, cantidad: 10, precioTotal: 500, fecha: serverTimestamp(), tipo: 'compra',
+    });
+    b.set(doc(collection(db, 'movimientos')), {
+      tipo: 'compra', materialId: 'g1', rolloId: null, cantidad: 10, usuarioId: 'dueno1', fecha: serverTimestamp(),
+    });
+    await assertSucceeds(b.commit());
+  });
+
+  it('compra de tela (rollo nuevo y rollos_costos)', async () => {
+    const db = como(env, 'dueno1');
+    const rolloRef = doc(collection(db, 'rollos'));
+    const b = writeBatch(db);
+    b.set(rolloRef, {
+      materialId: 'm1', codigo: '#4', cantidadInicial: 25, existencia: 25, fechaCompra: Timestamp.now(),
+    });
+    b.set(doc(db, 'rollos_costos', rolloRef.id), { costoPorUnidad: 120 });
+    b.update(doc(db, 'materiales', 'm1'), { existencia: increment(25), marcadoAgotandose: false });
+    b.set(
+      doc(db, 'materiales_costos', 'm1'),
+      { cantidadComprada: increment(25), costoTotalComprado: increment(3000) },
+      { merge: true },
+    );
+    b.set(doc(collection(db, 'compras')), {
+      materialId: 'm1', rolloId: rolloRef.id, cantidad: 25, precioTotal: 3000, fecha: Timestamp.now(), tipo: 'compra',
+    });
+    b.set(doc(collection(db, 'movimientos')), {
+      tipo: 'compra', materialId: 'm1', rolloId: rolloRef.id, cantidad: 25, usuarioId: 'dueno1', fecha: Timestamp.now(),
+    });
+    await assertSucceeds(b.commit());
+  });
+
+  it('carga inicial sin costo', async () => {
+    const db = como(env, 'dueno1');
+    const rolloRef = doc(collection(db, 'rollos'));
+    const b = writeBatch(db);
+    b.set(rolloRef, {
+      materialId: 'm1', codigo: '#5', cantidadInicial: 8, existencia: 8, fechaCompra: serverTimestamp(),
+    });
+    b.set(doc(db, 'rollos_costos', rolloRef.id), { costoPorUnidad: null });
+    b.update(doc(db, 'materiales', 'm1'), { existencia: increment(8) });
+    b.set(doc(collection(db, 'compras')), {
+      materialId: 'm1', rolloId: rolloRef.id, cantidad: 8, precioTotal: null, fecha: serverTimestamp(), tipo: 'inicial',
+    });
+    b.set(doc(collection(db, 'movimientos')), {
+      tipo: 'inicial', materialId: 'm1', rolloId: rolloRef.id, cantidad: 8, usuarioId: 'dueno1', fecha: serverTimestamp(),
+    });
+    await assertSucceeds(b.commit());
+  });
+
+  it('ajuste de -3.5 en tela', async () => {
+    const db = como(env, 'dueno1');
+    await sembrar('materiales', 'm1', material({ existencia: 50 }));
+    const b = writeBatch(db);
+    b.update(doc(db, 'materiales', 'm1'), { existencia: increment(-3.5) });
+    b.update(doc(db, 'rollos', 'r1'), { existencia: increment(-3.5) });
+    b.set(doc(collection(db, 'movimientos')), {
+      tipo: 'ajuste', materialId: 'm1', rolloId: 'r1', cantidad: -3.5, usuarioId: 'dueno1', fecha: serverTimestamp(),
+    });
+    await assertSucceeds(b.commit());
   });
 });

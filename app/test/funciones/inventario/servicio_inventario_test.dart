@@ -144,6 +144,13 @@ void main() {
         servicio.registrarCompra(material: g, cantidad: 1, precioTotal: -1),
         throwsArgumentError);
     await expectLater(
+        servicio.registrarCompra(material: g, cantidad: 1, precioTotal: 0),
+        throwsArgumentError);
+    await expectLater(
+        servicio.registrarCargaInicial(
+            material: g, cantidad: 1, costoPorUnidad: 0),
+        throwsArgumentError);
+    await expectLater(
         servicio.registrarCompra(material: t, cantidad: 5, precioTotal: 10),
         throwsArgumentError);
     await expectLater(

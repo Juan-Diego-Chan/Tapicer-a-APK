@@ -43,7 +43,7 @@ class PantallaMaterial extends ConsumerWidget {
               ),
               Text(
                 'Existencia: ${formatearCantidad(m.existencia, m.unidad)}',
-                style: m.existencia < 0
+                style: m.existenciaNegativa
                     ? TextStyle(color: Theme.of(context).colorScheme.error)
                     : null,
               ),
