@@ -7,7 +7,9 @@ import {
   getDoc,
   getDocs,
   increment,
+  serverTimestamp,
   setDoc,
+  Timestamp,
   updateDoc,
   type Firestore,
 } from 'firebase/firestore';
@@ -23,6 +25,24 @@ const material = (extra: Record<string, unknown> = {}) => ({
   existencia: 0,
   usaRollos: true,
   marcadoAgotandose: false,
+  ...extra,
+});
+
+const rollo = (extra: Record<string, unknown> = {}) => ({
+  materialId: 'm1',
+  codigo: 'R-1',
+  cantidadInicial: 50,
+  existencia: 50,
+  fechaCompra: Timestamp.now(),
+  ...extra,
+});
+
+const movimiento = (extra: Record<string, unknown> = {}) => ({
+  tipo: 'compra',
+  materialId: 'm1',
+  cantidad: 5,
+  usuarioId: 'dueno1',
+  fecha: Timestamp.now(),
   ...extra,
 });
 
@@ -45,10 +65,10 @@ beforeEach(async () => {
   await sembrarUsuario(env, 'inact', { rol: 'empleado', activo: false });
   await sembrar('materiales', 'm1', material());
   await sembrar('materiales_costos', 'm1', { costoPromedio: 5 });
-  await sembrar('rollos', 'r1', { materialId: 'm1', largo: 50 });
+  await sembrar('rollos', 'r1', rollo());
   await sembrar('rollos_costos', 'r1', { costo: 100 });
   await sembrar('compras', 'c1', { materialId: 'm1', total: 100 });
-  await sembrar('movimientos', 'mv1', { materialId: 'm1', tipo: 'entrada', cantidad: 5 });
+  await sembrar('movimientos', 'mv1', movimiento());
 });
 
 describe('materiales', () => {
@@ -66,6 +86,33 @@ describe('materiales', () => {
     await assertFails(
       setDoc(doc(como(env, 'dueno1'), 'materiales', 'nuevo'), material({ nombre: 123 })),
     );
+  });
+
+  it('dueño no crea material sin nombre', async () => {
+    const { nombre: _n, ...sinNombre } = material();
+    await assertFails(setDoc(doc(como(env, 'dueno1'), 'materiales', 'nuevo'), sinNombre));
+  });
+
+  it('dueño no crea material sin usaRollos', async () => {
+    const { usaRollos: _u, ...sinUsa } = material();
+    await assertFails(setDoc(doc(como(env, 'dueno1'), 'materiales', 'nuevo'), sinUsa));
+  });
+
+  it('dueño no crea material con campo extra', async () => {
+    await assertFails(setDoc(doc(como(env, 'dueno1'), 'materiales', 'nuevo'), material({ costo: 50 })));
+  });
+
+  it('empleado no mezcla marcadoAgotandose con existencia', async () => {
+    await assertFails(
+      updateDoc(doc(como(env, 'emp1'), 'materiales', 'm1'), { marcadoAgotandose: true, existencia: 99 }),
+    );
+  });
+
+  it('usuario sin doc en usuarios no lee materiales, rollos ni movimientos', async () => {
+    const db = como(env, 'fantasma');
+    await assertFails(getDocs(collection(db, 'materiales')));
+    await assertFails(getDoc(doc(db, 'rollos', 'r1')));
+    await assertFails(getDocs(collection(db, 'movimientos')));
   });
 
   it('dueño incrementa existencia con increment', async () => {
@@ -116,6 +163,7 @@ describe.each([
   it('empleado no lee ni escribe', async () => {
     const db = como(env, 'emp1');
     await assertFails(getDoc(doc(db, ruta, id)));
+    await assertFails(getDocs(collection(db, ruta)));
     await assertFails(setDoc(doc(db, ruta, 'otro'), datos));
     await assertFails(updateDoc(doc(db, ruta, id), datos));
   });
@@ -131,12 +179,20 @@ describe('rollos', () => {
   it('empleado lee pero no escribe', async () => {
     const db = como(env, 'emp1');
     await assertSucceeds(getDoc(doc(db, 'rollos', 'r1')));
-    await assertFails(setDoc(doc(db, 'rollos', 'nuevo'), { materialId: 'm1', largo: 1 }));
-    await assertFails(updateDoc(doc(db, 'rollos', 'r1'), { largo: 1 }));
+    await assertFails(setDoc(doc(db, 'rollos', 'nuevo'), rollo()));
+    await assertFails(updateDoc(doc(db, 'rollos', 'r1'), { existencia: 1 }));
   });
 
   it('dueño escribe', async () => {
-    await assertSucceeds(setDoc(doc(como(env, 'dueno1'), 'rollos', 'nuevo'), { materialId: 'm1', largo: 1 }));
+    await assertSucceeds(setDoc(doc(como(env, 'dueno1'), 'rollos', 'nuevo'), rollo()));
+  });
+
+  it('dueño no crea rollo con cantidadInicial 0', async () => {
+    await assertFails(setDoc(doc(como(env, 'dueno1'), 'rollos', 'nuevo'), rollo({ cantidadInicial: 0 })));
+  });
+
+  it('dueño descuenta existencia de un rollo con increment(-2)', async () => {
+    await assertSucceeds(updateDoc(doc(como(env, 'dueno1'), 'rollos', 'r1'), { existencia: increment(-2) }));
   });
 });
 
@@ -144,11 +200,22 @@ describe('movimientos', () => {
   it('empleado lee pero no crea', async () => {
     const db = como(env, 'emp1');
     await assertSucceeds(getDoc(doc(db, 'movimientos', 'mv1')));
-    await assertFails(setDoc(doc(db, 'movimientos', 'nuevo'), { materialId: 'm1', tipo: 'salida' }));
+    await assertFails(setDoc(doc(db, 'movimientos', 'nuevo'), movimiento({ tipo: 'consumo', usuarioId: 'emp1' })));
   });
 
-  it('dueño crea', async () => {
-    await assertSucceeds(setDoc(doc(como(env, 'dueno1'), 'movimientos', 'nuevo'), { materialId: 'm1', tipo: 'entrada' }));
+  it('dueño crea un movimiento válido', async () => {
+    const db = como(env, 'dueno1');
+    await assertSucceeds(setDoc(doc(db, 'movimientos', 'nuevo'), movimiento()));
+    await assertSucceeds(
+      setDoc(doc(db, 'movimientos', 'n2'), movimiento({ rolloId: 'r1', pedidoId: null, fecha: serverTimestamp() })),
+    );
+  });
+
+  it('dueño no crea movimientos mal formados', async () => {
+    const db = como(env, 'dueno1');
+    await assertFails(setDoc(doc(db, 'movimientos', 'x'), movimiento({ cantidad: '5' })));
+    await assertFails(setDoc(doc(db, 'movimientos', 'x'), movimiento({ usuarioId: 'emp1' })));
+    await assertFails(setDoc(doc(db, 'movimientos', 'x'), movimiento({ tipo: 'robo' })));
   });
 
   it('nadie actualiza ni borra un movimiento', async () => {
