@@ -55,6 +55,50 @@ service cloud.firestore {
       allow read, write: if esDueno();
     }
 
+    // ---- Inventario ----
+    function materialValido(d) {
+      return d.nombre is string && d.nombre.size() >= 1 && d.nombre.size() <= 100
+        && d.categoria in ['tela', 'espuma', 'guata', 'resortes', 'cinchas', 'grapas', 'otros']
+        && d.unidad in ['m', 'kg', 'pza', 'l']
+        && d.stockMinimo is number && d.stockMinimo >= 0
+        && d.existencia is number
+        && d.usaRollos is bool
+        && d.marcadoAgotandose is bool;
+    }
+
+    match /materiales/{id} {
+      allow read: if activo();
+      allow create: if esDueno() && materialValido(request.resource.data);
+      allow update: if (esDueno() && materialValido(request.resource.data))
+        || (esEmpleado() && soloCambia(['marcadoAgotandose'])
+          && request.resource.data.marcadoAgotandose == true);
+      allow delete: if esDueno();
+    }
+
+    match /materiales_costos/{id} {
+      allow read, write: if esDueno();
+    }
+
+    match /rollos/{id} {
+      allow read: if activo();
+      allow write: if esDueno();
+    }
+
+    match /rollos_costos/{id} {
+      allow read, write: if esDueno();
+    }
+
+    match /compras/{id} {
+      allow read, write: if esDueno();
+    }
+
+    // Inmutables: las correcciones se hacen con un ajuste (nuevo movimiento).
+    match /movimientos/{id} {
+      allow read: if activo();
+      allow create: if esDueno();
+      allow update, delete: if false;
+    }
+
     // Todo lo demas, denegado.
     match /{document=**} {
       allow read, write: if false;
