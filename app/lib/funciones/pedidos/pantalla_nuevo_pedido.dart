@@ -125,7 +125,8 @@ class _PantallaNuevoPedidoState extends ConsumerState<PantallaNuevoPedido> {
       messenger
           .showSnackBar(const SnackBar(content: Text('No se pudo guardar')));
     });
-    router.go('/pedidos/${resultado.pedidoId}');
+    // Reemplaza solo esta pantalla: `go` rehace la pila y pierde el menú.
+    router.pushReplacement('/pedidos/${resultado.pedidoId}');
   }
 
   @override

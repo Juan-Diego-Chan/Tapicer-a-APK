@@ -58,12 +58,12 @@ class _ServicioSinRed implements ServicioPedidos {
 }
 
 Future<FakeFirebaseFirestore> _montar(WidgetTester t,
-    {ServicioPedidos? servicio}) async {
+    {ServicioPedidos? servicio, GoRouter? router}) async {
   t.view.physicalSize = const Size(800, 3000);
   t.view.devicePixelRatio = 1;
   addTearDown(t.view.reset);
   final db = FakeFirebaseFirestore();
-  final router = GoRouter(routes: [
+  router ??= GoRouter(routes: [
     GoRoute(path: '/', builder: (_, _) => const PantallaNuevoPedido()),
     GoRoute(
         path: '/pedidos/:id',
@@ -217,5 +217,40 @@ void main() {
     expect((await escribir('Nombre')).length, 100);
     expect((await escribir('Teléfono')).length, 30);
     expect((await escribir('Dirección')).length, 200);
+  });
+
+  testWidgets('al guardar y regresar sigue la flecha hacia el menú',
+      (t) async {
+    final router = GoRouter(routes: [
+      GoRoute(path: '/', builder: (_, _) => const Text('menú')),
+      GoRoute(
+        path: '/pedidos',
+        builder: (_, _) => const Text('lista'),
+        routes: [
+          GoRoute(path: 'nuevo', builder: (_, _) => const PantallaNuevoPedido()),
+          GoRoute(
+              path: ':id',
+              builder: (_, s) => Text('detalle ${s.pathParameters['id']}')),
+        ],
+      ),
+    ]);
+    await _montar(t, servicio: _ServicioSinRed(), router: router);
+    router.push('/pedidos');
+    await t.pumpAndSettle();
+    router.push('/pedidos/nuevo');
+    await t.pumpAndSettle();
+    await t.enterText(find.widgetWithText(TextFormField, 'Nombre'), 'Luis');
+    await _agregarMueble(t, 'Sillón', '650');
+
+    await _guardar(t);
+    expect(find.text('detalle ped-offline'), findsOneWidget);
+
+    router.pop();
+    await t.pumpAndSettle();
+    expect(find.text('lista'), findsOneWidget);
+    expect(router.canPop(), isTrue);
+    router.pop();
+    await t.pumpAndSettle();
+    expect(find.text('menú'), findsOneWidget);
   });
 }
