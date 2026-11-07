@@ -124,6 +124,171 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ---- Clientes, pedidos, muebles, precios y plantillas ----
+    // Acotado: rechaza negativos, NaN (NaN >= 0 es false) e Infinity.
+    function dinero(v) {
+      return v is number && v >= 0 && v < 1000000000;
+    }
+
+    function textoHasta(v, max) {
+      return v is string && v.size() <= max;
+    }
+
+    function textoEntre(v, min, max) {
+      return v is string && v.size() >= min && v.size() <= max;
+    }
+
+    function estadoValido(e) {
+      return e in ['recibido', 'en_proceso', 'terminado', 'entregado', 'cancelado'];
+    }
+
+    function nuloOTexto(v) {
+      return v == null || v is string;
+    }
+
+    function nuloOFecha(v) {
+      return v == null || v is timestamp;
+    }
+
+    function clienteValido(d) {
+      return d.keys().hasOnly(['nombre', 'telefono', 'direccion'])
+        && textoEntre(d.nombre, 1, 100)
+        && textoHasta(d.telefono, 30)
+        && textoHasta(d.direccion, 200);
+    }
+
+    function pedidoValido(d) {
+      return d.keys().hasOnly(['folio', 'clienteId', 'cliente', 'entrega', 'envio', 'comentarios',
+          'fechaIngreso', 'fechaEstimada', 'fechaTerminado', 'fechaEntregado', 'estado', 'creadoPor',
+          'ultimoCambioId'])
+        && textoEntre(d.folio, 1, 20)
+        && d.clienteId is string
+        && clienteValido(d.cliente)
+        && d.entrega in ['recoge', 'domicilio']
+        && dinero(d.envio)
+        && textoHasta(d.comentarios, 1000)
+        && d.fechaIngreso is timestamp
+        && d.fechaEstimada is timestamp
+        && nuloOFecha(d.fechaTerminado)
+        && nuloOFecha(d.fechaEntregado)
+        && estadoValido(d.estado)
+        && d.creadoPor is string
+        && nuloOTexto(d.ultimoCambioId);
+    }
+
+    function muebleValido(d) {
+      return d.keys().hasOnly(['tipoTrabajo', 'tipoMueble', 'plantillaId', 'precio', 'comentarios',
+          'estado', 'ultimoCambioId'])
+        && d.tipoTrabajo in ['fabricacion', 'reparacion']
+        && textoEntre(d.tipoMueble, 1, 100)
+        && nuloOTexto(d.plantillaId)
+        && dinero(d.precio)
+        && textoHasta(d.comentarios, 1000)
+        && estadoValido(d.estado)
+        && nuloOTexto(d.ultimoCambioId);
+    }
+
+    function cambioValido(d) {
+      return d.keys().hasOnly(['campo', 'muebleId', 'anterior', 'nuevo', 'motivo', 'usuarioId', 'fecha'])
+        && ((d.campo == 'precio' && d.muebleId is string)
+          || (d.campo == 'envio' && d.muebleId == null))
+        && dinero(d.anterior)
+        && dinero(d.nuevo)
+        && d.anterior != d.nuevo
+        && (d.motivo == null || textoHasta(d.motivo, 200))
+        && d.usuarioId == request.auth.uid
+        && d.fecha is timestamp;
+    }
+
+    function plantillaValida(d) {
+      return d.keys().hasOnly(['tipoMueble', 'lineas'])
+        && textoEntre(d.tipoMueble, 1, 100)
+        && d.lineas is list && d.lineas.size() <= 50;
+    }
+
+    // Registro de cambio de precio que acompaña a la escritura (en el mismo lote).
+    // Si el nuevo ultimoCambioId es null, la ruta falla y se deniega.
+    function registroDe(p) {
+      return getAfter(/databases/$(database)/documents/pedidos/$(p)/cambios_precio/$(request.resource.data.ultimoCambioId)).data;
+    }
+
+    function cambioRegistrado(p, campo) {
+      return request.resource.data.ultimoCambioId != resource.data.get('ultimoCambioId', null)
+        && registroDe(p).campo == campo
+        && registroDe(p).anterior == resource.data[campo]
+        && registroDe(p).nuevo == request.resource.data[campo]
+        && registroDe(p).usuarioId == request.auth.uid;
+    }
+
+    // Aplica también al dueño: ningún cambio de precio pasa sin quedar registrado.
+    function envioRegistrado(p) {
+      return request.resource.data.envio == resource.data.envio
+        || cambioRegistrado(p, 'envio');
+    }
+
+    function precioRegistrado(p, m) {
+      return request.resource.data.precio == resource.data.precio
+        || (cambioRegistrado(p, 'precio') && registroDe(p).muebleId == m);
+    }
+
+    match /clientes/{id} {
+      allow read: if activo();
+      allow create, update: if activo() && clienteValido(request.resource.data);
+      allow delete: if esDueno();
+    }
+
+    match /pedidos/{p} {
+      allow read: if activo();
+      allow create: if activo()
+        && pedidoValido(request.resource.data)
+        && request.resource.data.creadoPor == request.auth.uid
+        && request.resource.data.ultimoCambioId == null
+        && request.resource.data.fechaTerminado == null
+        && request.resource.data.fechaEntregado == null;
+      allow update: if pedidoValido(request.resource.data)
+        && envioRegistrado(p)
+        && (esDueno()
+          || (esEmpleado() && soloCambia(['entrega', 'envio', 'comentarios', 'fechaEstimada',
+              'fechaTerminado', 'fechaEntregado', 'estado', 'ultimoCambioId'])));
+      allow delete: if esDueno();
+
+      match /muebles/{m} {
+        allow read: if activo();
+        allow create: if activo()
+          && muebleValido(request.resource.data)
+          && request.resource.data.ultimoCambioId == null
+          && existsAfter(/databases/$(database)/documents/pedidos/$(p));
+        allow update: if muebleValido(request.resource.data)
+          && precioRegistrado(p, m)
+          && (esDueno()
+            || (esEmpleado() && soloCambia(['precio', 'comentarios', 'estado', 'ultimoCambioId'])));
+        allow delete: if esDueno();
+      }
+
+      // Historial de precios: solo el dueño lo lee; inmutable.
+      match /cambios_precio/{c} {
+        allow read: if esDueno();
+        allow create: if activo()
+          && cambioValido(request.resource.data)
+          && ((request.resource.data.campo == 'envio'
+              && getAfter(/databases/$(database)/documents/pedidos/$(p)).data.ultimoCambioId == c)
+            || (request.resource.data.campo == 'precio'
+              && getAfter(/databases/$(database)/documents/pedidos/$(p)/muebles/$(request.resource.data.muebleId)).data.ultimoCambioId == c));
+        allow update, delete: if false;
+      }
+    }
+
+    // Consulta de grupo (Fabricación / Reparación).
+    match /{ruta=**}/muebles/{m} {
+      allow read: if activo();
+    }
+
+    match /plantillas/{id} {
+      allow read: if activo();
+      allow create, update: if esDueno() && plantillaValida(request.resource.data);
+      allow delete: if esDueno();
+    }
+
     // Todo lo demas, denegado.
     match /{document=**} {
       allow read, write: if false;
