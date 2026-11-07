@@ -7,6 +7,7 @@ import '../funciones/auth/pantalla_estado_cuenta.dart';
 import '../funciones/auth/pantalla_inicio_sesion.dart';
 import '../funciones/auth/providers.dart';
 import '../funciones/auth/servicio_sesion.dart';
+import '../funciones/compras/pantalla_lista_compras.dart';
 import '../funciones/inicio/pantalla_inicio.dart';
 import '../funciones/inventario/pantalla_inventario.dart';
 import '../funciones/inventario/pantalla_material.dart';
@@ -19,7 +20,7 @@ final _rutasSoloDueno = entradasMenu
     .toList();
 
 /// Rutas con pantalla real; el resto usa el marcador "Próximamente".
-const _rutasConPantalla = {'/usuarios', '/inventario'};
+const _rutasConPantalla = {'/usuarios', '/inventario', '/compras'};
 
 /// Lógica pura de guardia. Devuelve la ruta destino o null si no hay que
 /// redirigir.
@@ -75,6 +76,10 @@ GoRouter crearRouter(Ref ref) {
                 PantallaMaterial(materialId: s.pathParameters['id']!),
           ),
         ],
+      ),
+      GoRoute(
+        path: '/compras',
+        builder: (_, _) => const PantallaListaCompras(),
       ),
       for (final e in entradasMenu.where(
         (e) => !_rutasConPantalla.contains(e.ruta),
