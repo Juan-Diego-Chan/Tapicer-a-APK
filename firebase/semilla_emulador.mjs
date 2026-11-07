@@ -1,5 +1,6 @@
 // Siembra los emuladores locales (proyecto demo-tapiceria): un dueño, un empleado
-// y dos materiales (Tela lino gris con el rollo #1 y Guata).
+// dos materiales (Tela lino gris con el rollo #1 y Guata), una plantilla,
+// un cliente y un pedido de ejemplo.
 // Uso: con los emuladores corriendo (firebase emulators:start --only auth,firestore --project demo-tapiceria):
 //   node firebase/semilla_emulador.mjs
 // Es idempotente: se puede correr varias veces. Solo para desarrollo local:
@@ -51,6 +52,8 @@ const texto = (v) => ({ stringValue: v });
 const entero = (v) => ({ integerValue: String(v) });
 const booleano = (v) => ({ booleanValue: v });
 const nulo = () => ({ nullValue: null });
+const mapa = (campos) => ({ mapValue: { fields: campos } });
+const lista = (valores) => ({ arrayValue: { values: valores } });
 const fecha = (v) => ({ timestampValue: v });
 
 // PATCH reemplaza el documento (los campos van completos), así que re-correr
@@ -171,3 +174,58 @@ await registrarCompra('semilla-guata', {
   ahora,
 });
 console.log('Material: Guata (2 kg, mínimo 5, $60/kg)');
+
+// Plantilla: un sillón de 3 plazas usa 6 m de tela y 1 kg de guata.
+await escribir('plantillas/sillon-3-plazas', {
+  tipoMueble: texto('Sillón 3 plazas'),
+  lineas: lista([
+    mapa({ materialId: texto('tela-lino-gris'), cantidad: entero(6) }),
+    mapa({ materialId: texto('guata'), cantidad: entero(1) }),
+  ]),
+});
+console.log('Plantilla: Sillón 3 plazas (6 m de tela, 1 kg de guata)');
+
+// Cliente y pedido de ejemplo (un sillón por fabricar, entrega en 7 días).
+await escribir('clientes/cliente-maria', {
+  nombre: texto('María López'),
+  telefono: texto('999 111 2233'),
+  direccion: texto('Calle 60 #500, Centro'),
+});
+console.log('Cliente: María López');
+
+const fechaIngreso = new Date();
+const fechaEstimada = new Date(fechaIngreso.getTime() + 7 * 24 * 60 * 60 * 1000);
+const dos = (n) => String(n).padStart(2, '0');
+// Mismo formato que folioPara en la app: yyMMdd-XXXX (4 primeros del id).
+const folio =
+  `${dos(fechaIngreso.getFullYear() % 100)}${dos(fechaIngreso.getMonth() + 1)}` +
+  `${dos(fechaIngreso.getDate())}-${'pedido-demo'.slice(0, 4).toUpperCase()}`;
+await escribir('pedidos/pedido-demo', {
+  folio: texto(folio),
+  clienteId: texto('cliente-maria'),
+  cliente: mapa({
+    nombre: texto('María López'),
+    telefono: texto('999 111 2233'),
+    direccion: texto('Calle 60 #500, Centro'),
+  }),
+  entrega: texto('domicilio'),
+  envio: entero(300),
+  comentarios: texto(''),
+  fechaIngreso: fecha(fechaIngreso.toISOString()),
+  fechaEstimada: fecha(fechaEstimada.toISOString()),
+  fechaTerminado: nulo(),
+  fechaEntregado: nulo(),
+  estado: texto('recibido'),
+  creadoPor: texto(uidDueno),
+  ultimoCambioId: nulo(),
+});
+await escribir('pedidos/pedido-demo/muebles/mueble-demo', {
+  tipoTrabajo: texto('fabricacion'),
+  tipoMueble: texto('Sillón 3 plazas'),
+  plantillaId: texto('sillon-3-plazas'),
+  precio: entero(6500),
+  comentarios: texto(''),
+  estado: texto('recibido'),
+  ultimoCambioId: nulo(),
+});
+console.log(`Pedido: ${folio} (María López, sillón de 3 plazas, $6500 + envío $300)`);

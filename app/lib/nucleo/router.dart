@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../dominio/pedidos.dart' show TipoTrabajo;
 import '../dominio/usuario.dart';
 import '../funciones/auth/pantalla_estado_cuenta.dart';
 import '../funciones/auth/pantalla_inicio_sesion.dart';
@@ -16,6 +17,7 @@ import '../funciones/pedidos/pantalla_nuevo_pedido.dart';
 import '../funciones/pedidos/pantalla_pedido.dart';
 import '../funciones/pedidos/pantalla_pedidos.dart';
 import '../funciones/plantillas/pantalla_plantillas.dart';
+import '../funciones/trabajo/pantalla_trabajo.dart';
 import '../funciones/usuarios/pantalla_usuarios.dart';
 import 'pantalla_proximamente.dart';
 
@@ -31,6 +33,8 @@ const _rutasConPantalla = {
   '/compras',
   '/plantillas',
   '/pedidos',
+  '/fabricacion',
+  '/reparacion',
 };
 
 /// Lógica pura de guardia. Devuelve la ruta destino o null si no hay que
@@ -116,6 +120,14 @@ GoRouter crearRouter(Ref ref) {
             ],
           ),
         ],
+      ),
+      GoRoute(
+        path: '/fabricacion',
+        builder: (_, _) => const PantallaTrabajo(tipo: TipoTrabajo.fabricacion),
+      ),
+      GoRoute(
+        path: '/reparacion',
+        builder: (_, _) => const PantallaTrabajo(tipo: TipoTrabajo.reparacion),
       ),
       for (final e in entradasMenu.where(
         (e) => !_rutasConPantalla.contains(e.ruta),
