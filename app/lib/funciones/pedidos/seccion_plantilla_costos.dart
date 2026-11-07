@@ -112,7 +112,7 @@ class _TablaEstimadoUsado extends ConsumerWidget {
                 celda(
                   cantidad(c.usado, c.materialId),
                   key: Key('usado-${c.materialId}'),
-                  estilo: c.excedido
+                  estilo: (conEstimado && c.excedido)
                       ? TextStyle(color: tema.colorScheme.error)
                       : null,
                 ),

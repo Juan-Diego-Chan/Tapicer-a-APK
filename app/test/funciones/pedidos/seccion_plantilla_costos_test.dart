@@ -140,7 +140,7 @@ void main() {
     expect(t.widget<Text>(find.byKey(const Key('usado-tela'))).style?.color,
         cs.error);
     expect(t.widget<Text>(find.byKey(const Key('estimado-grapas'))).data, '—');
-    // Fuera de plantilla el estimado es 0, así que el domino lo cuenta excedido.
+    // Fuera de plantilla el estimado es 0, así que el dominio lo cuenta excedido.
     expect(t.widget<Text>(find.byKey(const Key('usado-grapas'))).style?.color,
         cs.error);
   });
@@ -200,5 +200,8 @@ void main() {
         mueble: _mueble(plantillaId: null), lineas: [_linea('grapas', 3)]);
     expect(find.text('Sin plantilla'), findsOneWidget);
     expect(find.byKey(const Key('usado-grapas')), findsOneWidget);
+    final cs = Theme.of(t.element(find.byType(Scaffold))).colorScheme;
+    expect(t.widget<Text>(find.byKey(const Key('usado-grapas'))).style?.color,
+        isNot(cs.error));
   });
 }
