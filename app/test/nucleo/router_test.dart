@@ -31,6 +31,11 @@ void main() {
     expect(redirigir(emp, '/usuarios/x'), '/');
     expect(redirigir(emp, '/pedidos'), isNull);
   });
+  test('empleado entra a inventario y su detalle', () {
+    final emp = _sesion(Rol.empleado);
+    expect(redirigir(emp, '/inventario'), isNull);
+    expect(redirigir(emp, '/inventario/abc'), isNull);
+  });
   test('dueño entra a rutas solo dueño', () {
     final due = _sesion(Rol.dueno);
     for (final r in ['/usuarios', '/compras', '/contabilidad']) {
