@@ -201,4 +201,21 @@ void main() {
     await _guardar(t);
     expect(find.text('detalle ped-offline'), findsOneWidget);
   });
+
+  testWidgets('los textos no pasan de los límites de las reglas', (t) async {
+    await _montar(t);
+    final largo = 'x' * 1500;
+    Future<String> escribir(String etiqueta) async {
+      final campo = find.widgetWithText(TextFormField, etiqueta);
+      await t.ensureVisible(campo);
+      await t.enterText(campo, largo);
+      await t.pump();
+      return t.widget<TextFormField>(campo).controller!.text;
+    }
+
+    expect((await escribir('Comentarios')).length, 1000);
+    expect((await escribir('Nombre')).length, 100);
+    expect((await escribir('Teléfono')).length, 30);
+    expect((await escribir('Dirección')).length, 200);
+  });
 }

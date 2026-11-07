@@ -38,13 +38,39 @@ class PantallaPedido extends ConsumerWidget {
   }
 }
 
-class _Detalle extends ConsumerWidget {
+class _Detalle extends ConsumerStatefulWidget {
   const _Detalle({required this.pedido, required this.muebles});
 
   final Pedido pedido;
   final List<Mueble> muebles;
 
-  Future<void> _agregarMueble(BuildContext context, WidgetRef ref) async {
+  @override
+  ConsumerState<_Detalle> createState() => _DetalleState();
+}
+
+class _DetalleState extends ConsumerState<_Detalle> {
+  Pedido get pedido => widget.pedido;
+  List<Mueble> get muebles => widget.muebles;
+
+  // Estado esperado ya enviado a reconciliar: una sola escritura por
+  // diferencia observada.
+  EstadoMueble? _reconciliando;
+
+  void _reconciliar() {
+    final esperado = estadoPedido([for (final m in muebles) m.estado]);
+    if (muebles.isEmpty || esperado == pedido.estado) {
+      _reconciliando = null;
+      return;
+    }
+    if (_reconciliando == esperado) return;
+    _reconciliando = esperado;
+    ref
+        .read(servicioPedidosProvider)
+        .reconciliarEstado(pedido: pedido, muebles: muebles)
+        ?.catchError((Object _) {});
+  }
+
+  Future<void> _agregarMueble(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     final nuevo = await mostrarDialogoMueble(context);
     if (nuevo == null) return;
@@ -56,7 +82,7 @@ class _Detalle extends ConsumerWidget {
     );
   }
 
-  Future<void> _cancelar(BuildContext context, WidgetRef ref) async {
+  Future<void> _cancelar(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     final confirmado = await showDialog<bool>(
       context: context,
@@ -87,14 +113,19 @@ class _Detalle extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    // Sin esperar: la reconciliación escribe en segundo plano.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _reconciliar();
+    });
     final tema = Theme.of(context);
     final c = pedido.cliente;
     final total = totalPedido([
       for (final m in muebles)
         if (m.estado != EstadoMueble.cancelado) m.precio,
     ], pedido.envio);
-    final puedeCancelar =
+    // Un pedido entregado o cancelado ya está cerrado.
+    final abierto =
         pedido.estado != EstadoMueble.cancelado &&
         pedido.estado != EstadoMueble.entregado;
 
@@ -159,25 +190,27 @@ class _Detalle extends ConsumerWidget {
           spacing: 8,
           runSpacing: 8,
           children: [
-            OutlinedButton.icon(
-              onPressed: () => _agregarMueble(context, ref),
-              icon: const Icon(Icons.add),
-              label: const Text('Agregar mueble'),
-            ),
-            OutlinedButton.icon(
-              onPressed: () => mostrarDialogoEnvio(context, pedido: pedido),
-              icon: const Icon(Icons.local_shipping_outlined),
-              label: const Text('Cambiar envío'),
-            ),
+            if (abierto)
+              OutlinedButton.icon(
+                onPressed: () => _agregarMueble(context),
+                icon: const Icon(Icons.add),
+                label: const Text('Agregar mueble'),
+              ),
+            if (abierto)
+              OutlinedButton.icon(
+                onPressed: () => mostrarDialogoEnvio(context, pedido: pedido),
+                icon: const Icon(Icons.local_shipping_outlined),
+                label: const Text('Cambiar envío'),
+              ),
             OutlinedButton.icon(
               onPressed: () =>
                   mostrarDialogoEditarPedido(context, pedido: pedido),
               icon: const Icon(Icons.edit_outlined),
               label: const Text('Editar'),
             ),
-            if (puedeCancelar)
+            if (abierto)
               OutlinedButton.icon(
-                onPressed: () => _cancelar(context, ref),
+                onPressed: () => _cancelar(context),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: tema.colorScheme.error,
                 ),

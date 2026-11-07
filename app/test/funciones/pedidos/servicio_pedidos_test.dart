@@ -166,6 +166,49 @@ void main() {
     expect(p2.estado, EstadoMueble.entregado);
   });
 
+  test('reconciliarEstado corrige un pedido con estado viejo', () async {
+    final r = crear();
+    await r.guardado;
+    final ped = db.collection('pedidos').doc(r.pedidoId);
+    for (final d in (await ped.collection('muebles').get()).docs) {
+      await d.reference.update({'estado': 'terminado'});
+    }
+    await ped.update({'estado': 'en_proceso'});
+    final (p, m) = await leer(r.pedidoId);
+    final f = servicio.reconciliarEstado(pedido: p, muebles: m, ahora: ahora);
+    expect(f, isNotNull);
+    await f;
+    final (p2, _) = await leer(r.pedidoId);
+    expect(p2.estado, EstadoMueble.terminado);
+    expect(p2.fechaTerminado, ahora);
+  });
+
+  test('reconciliarEstado devuelve null si no hay nada que escribir',
+      () async {
+    final r = crear();
+    await r.guardado;
+    final (p, m) = await leer(r.pedidoId);
+    expect(servicio.reconciliarEstado(pedido: p, muebles: m), isNull);
+    expect(servicio.reconciliarEstado(pedido: p, muebles: const []), isNull);
+  });
+
+  test('cancelarPedido fija fechaEntregado si queda entregado', () async {
+    final r = crear();
+    await r.guardado;
+    var (p, m) = await leer(r.pedidoId);
+    await servicio.cambiarEstadoMueble(
+        pedido: p,
+        muebles: m,
+        muebleId: m.first.id,
+        nuevo: EstadoMueble.entregado);
+    (p, m) = await leer(r.pedidoId);
+    expect(p.fechaEntregado, isNull);
+    await servicio.cancelarPedido(pedido: p, muebles: m, ahora: ahora);
+    final (p2, _) = await leer(r.pedidoId);
+    expect(p2.estado, EstadoMueble.entregado);
+    expect(p2.fechaEntregado, ahora);
+  });
+
   test('agregarMueble recalcula el estado', () async {
     final r = crear(muebles: [sofa]);
     await r.guardado;

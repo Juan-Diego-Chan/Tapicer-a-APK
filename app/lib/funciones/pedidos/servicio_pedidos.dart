@@ -123,20 +123,55 @@ class ServicioPedidos {
     return (pedidoId: pedidoRef.id, guardado: batch.commit());
   }
 
+  /// Cambios que necesita el pedido para reflejar [estados] (los estados
+  /// finales de sus muebles). Las fechas solo se fijan al pasar a ese estado
+  /// y si no las tenía. `null` si no hay nada que escribir.
+  Map<String, dynamic>? _cambiosDeEstado(
+    Pedido pedido,
+    Iterable<EstadoMueble> estados,
+    DateTime momento,
+  ) {
+    final estado = estadoPedido(estados);
+    if (estado == pedido.estado) return null;
+    return {
+      'estado': estado.clave,
+      if (estado == EstadoMueble.terminado && pedido.fechaTerminado == null)
+        'fechaTerminado': Timestamp.fromDate(momento),
+      if (estado == EstadoMueble.entregado && pedido.fechaEntregado == null)
+        'fechaEntregado': Timestamp.fromDate(momento),
+    };
+  }
+
+  /// Corrige el estado guardado del pedido cuando no coincide con el de sus
+  /// muebles (p. ej. dos teléfonos terminaron muebles distintos). Devuelve
+  /// `null` si no hay nada que escribir.
+  Future<void>? reconciliarEstado({
+    required Pedido pedido,
+    required List<Mueble> muebles,
+    DateTime? ahora,
+  }) {
+    if (muebles.isEmpty) return null;
+    final cambios = _cambiosDeEstado(
+        pedido, [for (final m in muebles) m.estado], ahora ?? DateTime.now());
+    if (cambios == null) return null;
+    return _db.collection('pedidos').doc(pedido.id).update(cambios);
+  }
+
   Future<void> agregarMueble({
     required Pedido pedido,
     required List<Mueble> muebles,
     required NuevoMueble nuevo,
+    DateTime? ahora,
   }) async {
     _validarMueble(nuevo);
     final batch = _db.batch();
     final pedidoRef = _db.collection('pedidos').doc(pedido.id);
     batch.set(pedidoRef.collection('muebles').doc(), _datosMueble(nuevo));
-    final estado = estadoPedido(
-        [for (final m in muebles) m.estado, EstadoMueble.recibido]);
-    if (estado != pedido.estado) {
-      batch.update(pedidoRef, {'estado': estado.clave});
-    }
+    final cambios = _cambiosDeEstado(
+        pedido,
+        [for (final m in muebles) m.estado, EstadoMueble.recibido],
+        ahora ?? DateTime.now());
+    if (cambios != null) batch.update(pedidoRef, cambios);
     return batch.commit();
   }
 
@@ -150,24 +185,15 @@ class ServicioPedidos {
     if (!muebles.any((m) => m.id == muebleId)) {
       throw ArgumentError('El mueble no pertenece al pedido');
     }
-    final momento = ahora ?? DateTime.now();
     final batch = _db.batch();
     final pedidoRef = _db.collection('pedidos').doc(pedido.id);
     batch.update(pedidoRef.collection('muebles').doc(muebleId),
         {'estado': nuevo.clave});
-    final estado = estadoPedido(
-        [for (final m in muebles) m.id == muebleId ? nuevo : m.estado]);
-    final cambios = <String, dynamic>{};
-    if (estado != pedido.estado) {
-      cambios['estado'] = estado.clave;
-      if (estado == EstadoMueble.terminado && pedido.fechaTerminado == null) {
-        cambios['fechaTerminado'] = Timestamp.fromDate(momento);
-      }
-      if (estado == EstadoMueble.entregado && pedido.fechaEntregado == null) {
-        cambios['fechaEntregado'] = Timestamp.fromDate(momento);
-      }
-    }
-    if (cambios.isNotEmpty) batch.update(pedidoRef, cambios);
+    final cambios = _cambiosDeEstado(
+        pedido,
+        [for (final m in muebles) m.id == muebleId ? nuevo : m.estado],
+        ahora ?? DateTime.now());
+    if (cambios != null) batch.update(pedidoRef, cambios);
     return batch.commit();
   }
 
@@ -175,6 +201,7 @@ class ServicioPedidos {
   Future<void> cancelarPedido({
     required Pedido pedido,
     required List<Mueble> muebles,
+    DateTime? ahora,
   }) async {
     final batch = _db.batch();
     final pedidoRef = _db.collection('pedidos').doc(pedido.id);
@@ -189,10 +216,8 @@ class ServicioPedidos {
       batch.update(pedidoRef.collection('muebles').doc(m.id),
           {'estado': EstadoMueble.cancelado.clave});
     }
-    final estado = estadoPedido(estados);
-    if (estado != pedido.estado) {
-      batch.update(pedidoRef, {'estado': estado.clave});
-    }
+    final cambios = _cambiosDeEstado(pedido, estados, ahora ?? DateTime.now());
+    if (cambios != null) batch.update(pedidoRef, cambios);
     return batch.commit();
   }
 

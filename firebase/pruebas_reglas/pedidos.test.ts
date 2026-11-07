@@ -150,6 +150,16 @@ describe('pedido + muebles en un lote', () => {
     await assertFails(lotePedido(como(env, 'emp1'), { m: { ultimoCambioId: 'x' } }).commit());
   });
 
+  it("falla si el mueble se crea con estado 'terminado'", async () => {
+    await assertFails(lotePedido(como(env, 'emp1'), { m: { estado: 'terminado' } }).commit());
+  });
+
+  it("empleado agrega un mueble 'recibido' a un pedido existente", async () => {
+    const db = como(env, 'emp1');
+    await assertSucceeds(setDoc(doc(db, 'pedidos', 'p1', 'muebles', 'nuevo1'), mueble()));
+    await assertFails(setDoc(doc(db, 'pedidos', 'p1', 'muebles', 'nuevo2'), mueble({ estado: 'entregado' })));
+  });
+
   it('falla si el mueble se crea en un pedido que no existe', async () => {
     const db = como(env, 'emp1');
     await assertFails(setDoc(doc(db, 'pedidos', 'noexiste', 'muebles', 'x'), mueble()));

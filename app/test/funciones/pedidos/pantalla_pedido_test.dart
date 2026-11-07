@@ -24,6 +24,8 @@ Future<FakeFirebaseFirestore> _montar(
   Rol rol, {
   bool conCambio = false,
   void Function()? alSuscribirCambios,
+  String estadoPedido = 'recibido',
+  String estadoMuebles = 'recibido',
 }) async {
   t.view.physicalSize = const Size(800, 3000);
   t.view.devicePixelRatio = 1;
@@ -43,7 +45,7 @@ Future<FakeFirebaseFirestore> _montar(
     'comentarios': 'Urge',
     'fechaIngreso': Timestamp.fromDate(DateTime(2026, 1, 1)),
     'fechaEstimada': Timestamp.fromDate(DateTime(2026, 12, 1)),
-    'estado': 'recibido',
+    'estado': estadoPedido,
     'creadoPor': 'u1',
   });
   for (final (id, tipo) in [('m1', 'Sillón'), ('m2', 'Silla')]) {
@@ -53,7 +55,7 @@ Future<FakeFirebaseFirestore> _montar(
       'plantillaId': null,
       'precio': 650,
       'comentarios': '',
-      'estado': 'recibido',
+      'estado': estadoMuebles,
       'ultimoCambioId': null,
     });
   }
@@ -81,7 +83,13 @@ Future<FakeFirebaseFirestore> _montar(
           return Stream.value(<CambioPrecio>[]);
         }),
     ],
-    child: const MaterialApp(home: PantallaPedido(pedidoId: 'p1')),
+    child: MaterialApp(
+      home: Consumer(builder: (context, ref, _) {
+        // En la app el router ya mantiene viva la sesión.
+        ref.watch(estadoSesionProvider);
+        return const PantallaPedido(pedidoId: 'p1');
+      }),
+    ),
   ));
   await t.pumpAndSettle();
   return db;
@@ -172,5 +180,36 @@ void main() {
     expect(find.text('Cancelado'), findsWidgets);
     expect(find.text('Total: \$200.00'), findsOneWidget);
     expect(find.text('Cancelar pedido'), findsNothing);
+  });
+
+  testWidgets('reconcilia el estado del pedido si quedó viejo', (t) async {
+    final db = await _montar(t, Rol.empleado,
+        estadoPedido: 'en_proceso', estadoMuebles: 'terminado');
+    final datos = (await db.collection('pedidos').doc('p1').get()).data()!;
+    expect(datos['estado'], 'terminado');
+    expect(datos['fechaTerminado'], isNotNull);
+  });
+
+  testWidgets('sin diferencia no escribe el pedido', (t) async {
+    final db = await _montar(t, Rol.empleado);
+    final datos = (await db.collection('pedidos').doc('p1').get()).data()!;
+    expect(datos['estado'], 'recibido');
+    expect(datos.containsKey('fechaTerminado'), false);
+  });
+
+  testWidgets('en un pedido cerrado no se agrega mueble ni se cambia envío',
+      (t) async {
+    await _montar(t, Rol.empleado,
+        estadoPedido: 'cancelado', estadoMuebles: 'cancelado');
+    expect(find.text('Agregar mueble'), findsNothing);
+    expect(find.text('Cambiar envío'), findsNothing);
+    expect(find.text('Cancelar pedido'), findsNothing);
+    expect(find.text('Editar'), findsOneWidget);
+  });
+
+  testWidgets('en un pedido abierto sí se ofrecen', (t) async {
+    await _montar(t, Rol.empleado);
+    expect(find.text('Agregar mueble'), findsOneWidget);
+    expect(find.text('Cambiar envío'), findsOneWidget);
   });
 }

@@ -330,6 +330,7 @@ service cloud.firestore {
         allow create: if activo()
           && muebleValido(request.resource.data)
           && request.resource.data.ultimoCambioId == null
+          && request.resource.data.estado == 'recibido'
           && existsAfter(/databases/$(database)/documents/pedidos/$(p));
         allow update: if muebleValido(request.resource.data)
           && precioRegistrado(p, m)

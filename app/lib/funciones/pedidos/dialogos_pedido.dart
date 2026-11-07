@@ -283,6 +283,7 @@ class _DialogoEditarPedidoState extends ConsumerState<_DialogoEditarPedido> {
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(
             controller: _comentarios,
+            maxLength: 1000,
             maxLines: 3,
             decoration: const InputDecoration(labelText: 'Comentarios'),
           ),

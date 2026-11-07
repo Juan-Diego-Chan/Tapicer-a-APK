@@ -111,6 +111,7 @@ class _DialogoMuebleState extends ConsumerState<DialogoMueble> {
                   key: const Key('tipo-mueble'),
                   controller: controller,
                   focusNode: foco,
+                  maxLength: 100,
                   textCapitalization: TextCapitalization.sentences,
                   decoration:
                       const InputDecoration(labelText: 'Tipo de mueble'),
@@ -153,6 +154,7 @@ class _DialogoMuebleState extends ConsumerState<DialogoMueble> {
               TextFormField(
                 key: const Key('comentarios-mueble'),
                 controller: _comentarios,
+                maxLength: 1000,
                 maxLines: 2,
                 decoration: const InputDecoration(labelText: 'Comentarios'),
               ),

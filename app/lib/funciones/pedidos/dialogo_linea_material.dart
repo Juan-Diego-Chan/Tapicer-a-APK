@@ -145,8 +145,11 @@ class _DialogoLineaState extends ConsumerState<_DialogoLinea> {
                 ),
                 validator: (v) {
                   final n = leerCantidad(v ?? '');
-                  return n == null || n <= 0
-                      ? 'Escribe una cantidad mayor a 0'
+                  if (n == null || n <= 0) {
+                    return 'Escribe una cantidad mayor a 0';
+                  }
+                  return n >= 1000000
+                      ? 'La cantidad debe ser menor a 1,000,000'
                       : null;
                 },
               ),

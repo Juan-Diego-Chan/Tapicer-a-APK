@@ -140,6 +140,7 @@ class _DialogoPlantillaState extends ConsumerState<DialogoPlantilla> {
             children: [
               TextFormField(
                 controller: _tipo,
+                maxLength: 100,
                 decoration: const InputDecoration(labelText: 'Tipo de mueble'),
                 validator: (v) => (v == null || v.trim().isEmpty)
                     ? 'Escribe el tipo de mueble'

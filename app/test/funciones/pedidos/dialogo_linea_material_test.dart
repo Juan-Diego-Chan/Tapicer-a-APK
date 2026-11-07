@@ -245,4 +245,17 @@ void main() {
     final ds = await _dias(db).get();
     expect(ds.docs.single.data()['usuarioId'], 'u2');
   });
+
+  testWidgets('rechaza una cantidad de un millón o más', (t) async {
+    final db = await _montar(t);
+    await _elegirMaterial(t, 'Tela');
+    await t.enterText(
+      find.widgetWithText(TextFormField, 'Cantidad (m)'),
+      '1000000',
+    );
+    await t.tap(find.text('Guardar'));
+    await t.pumpAndSettle();
+    expect(find.text('La cantidad debe ser menor a 1,000,000'), findsOneWidget);
+    expect((await _lineas(db).get()).size, 0);
+  });
 }

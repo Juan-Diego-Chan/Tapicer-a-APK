@@ -167,6 +167,7 @@ class _PantallaNuevoPedidoState extends ConsumerState<PantallaNuevoPedido> {
             ],
             TextFormField(
               controller: _nombre,
+              maxLength: 100,
               readOnly: soloLectura,
               textCapitalization: TextCapitalization.words,
               decoration: const InputDecoration(labelText: 'Nombre'),
@@ -176,12 +177,14 @@ class _PantallaNuevoPedidoState extends ConsumerState<PantallaNuevoPedido> {
             ),
             TextFormField(
               controller: _telefono,
+              maxLength: 30,
               readOnly: soloLectura,
               keyboardType: TextInputType.phone,
               decoration: const InputDecoration(labelText: 'Teléfono'),
             ),
             TextFormField(
               controller: _direccion,
+              maxLength: 200,
               // Un cliente sin dirección permite escribirla para este pedido;
               // el catálogo de clientes no se actualiza.
               readOnly: soloLectura && _cliente!.direccion.trim().isNotEmpty,
@@ -229,6 +232,7 @@ class _PantallaNuevoPedidoState extends ConsumerState<PantallaNuevoPedido> {
             ),
             TextFormField(
               controller: _comentarios,
+              maxLength: 1000,
               maxLines: 3,
               decoration: const InputDecoration(labelText: 'Comentarios'),
             ),
