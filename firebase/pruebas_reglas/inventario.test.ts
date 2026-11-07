@@ -181,7 +181,9 @@ describe('rollos', () => {
     const db = como(env, 'emp1');
     await assertSucceeds(getDoc(doc(db, 'rollos', 'r1')));
     await assertFails(setDoc(doc(db, 'rollos', 'nuevo'), rollo()));
-    await assertFails(updateDoc(doc(db, 'rollos', 'r1'), { existencia: 1 }));
+    // Bajar existencia sí se permite (consumo, ver consumo.test.ts); subirla no.
+    await assertFails(updateDoc(doc(db, 'rollos', 'r1'), { existencia: 51 }));
+    await assertFails(updateDoc(doc(db, 'rollos', 'r1'), { codigo: 'R-2' }));
   });
 
   it('dueño escribe', async () => {

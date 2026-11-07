@@ -90,12 +90,74 @@ service cloud.firestore {
         && d.fecha is timestamp;
     }
 
+    // ---- Consumo de material y días trabajados ----
+    // Línea de material usado en un mueble (pedidos/{p}/muebles/{m}/materiales/{l}).
+    function lineaValida(d) {
+      return d.keys().hasOnly(['materialId', 'rolloId', 'cantidad', 'delCliente', 'usuarioId', 'fecha'])
+        && d.materialId is string
+        && (d.rolloId == null || d.rolloId is string)
+        && d.cantidad is number && d.cantidad > 0 && d.cantidad < 1000000
+        && d.delCliente is bool
+        && d.usuarioId == request.auth.uid
+        && d.fecha is timestamp;
+    }
+
+    // Días: múltiplos de 0.5, > 0 y <= 7.
+    function diaValido(d) {
+      return d.keys().hasOnly(['usuarioId', 'dias', 'fecha'])
+        && d.usuarioId is string
+        && d.dias is number && d.dias > 0 && d.dias <= 7
+        && math.floor(d.dias * 2) == d.dias * 2
+        && d.fecha is timestamp;
+    }
+
+    // La línea {l} y su movimiento de consumo comparten id y cada uno exige al otro.
+    // Lado de la línea: el movimiento se crea en este mismo lote (no se reutiliza
+    // el de una línea borrada) y coincide en material, rollo, cantidad y destino.
+    function consumoEnlazado(p, m, l) {
+      let d = request.resource.data;
+      let ruta = /databases/$(database)/documents/movimientos/$(l);
+      let mov = getAfter(ruta).data;
+      return !exists(ruta)
+        && mov.tipo == 'consumo'
+        && mov.materialId == d.materialId
+        && mov.get('rolloId', null) == d.rolloId
+        && mov.cantidad == -d.cantidad
+        && mov.pedidoId == p
+        && mov.muebleId == m;
+    }
+
+    // Lado del movimiento: existe (tras el lote) una línea con el mismo id, no del
+    // cliente, en el pedido/mueble que indica, y con los mismos datos.
+    function consumoDeLinea(id, d) {
+      let linea = getAfter(/databases/$(database)/documents/pedidos/$(d.pedidoId)/muebles/$(d.muebleId)/materiales/$(id)).data;
+      return movimientoValido(d)
+        && d.tipo == 'consumo'
+        && d.cantidad < 0
+        && d.pedidoId is string
+        && d.muebleId is string
+        && linea.delCliente == false
+        && linea.materialId == d.materialId
+        && linea.rolloId == d.get('rolloId', null)
+        && linea.cantidad == -d.cantidad;
+    }
+
+    // Solo para update: la existencia baja (consumo del empleado) y sigue acotada.
+    // No se puede ligar el monto a un movimiento; se acepta (ver plan 3, tarea 4).
+    function soloBajaExistencia() {
+      return soloCambia(['existencia'])
+        && request.resource.data.existencia is number
+        && request.resource.data.existencia > -1000000000000000
+        && request.resource.data.existencia < resource.data.existencia;
+    }
+
     match /materiales/{id} {
       allow read: if activo();
       allow create: if esDueno() && materialValido(request.resource.data);
       allow update: if (esDueno() && materialValido(request.resource.data))
         || (esEmpleado() && soloCambia(['marcadoAgotandose'])
-          && request.resource.data.marcadoAgotandose == true);
+          && request.resource.data.marcadoAgotandose == true)
+        || (esEmpleado() && soloBajaExistencia());
       allow delete: if esDueno();
     }
 
@@ -105,7 +167,9 @@ service cloud.firestore {
 
     match /rollos/{id} {
       allow read: if activo();
-      allow create, update: if esDueno() && rolloValido(request.resource.data);
+      allow create: if esDueno() && rolloValido(request.resource.data);
+      allow update: if (esDueno() && rolloValido(request.resource.data))
+        || (esEmpleado() && soloBajaExistencia());
       allow delete: if esDueno();
     }
 
@@ -120,7 +184,8 @@ service cloud.firestore {
     // Inmutables: las correcciones se hacen con un ajuste (nuevo movimiento).
     match /movimientos/{id} {
       allow read: if activo();
-      allow create: if esDueno() && movimientoValido(request.resource.data);
+      allow create: if (esDueno() && movimientoValido(request.resource.data))
+        || (activo() && consumoDeLinea(id, request.resource.data));
       allow update, delete: if false;
     }
 
@@ -271,6 +336,28 @@ service cloud.firestore {
           && (esDueno()
             || (esEmpleado() && soloCambia(['precio', 'comentarios', 'estado', 'ultimoCambioId'])));
         allow delete: if esDueno();
+
+        // Material usado. Inmutable; el dueño la borra junto con un ajuste.
+        match /materiales/{l} {
+          allow read: if activo();
+          allow create: if activo()
+            && lineaValida(request.resource.data)
+            && existsAfter(/databases/$(database)/documents/pedidos/$(p)/muebles/$(m))
+            && (request.resource.data.delCliente == true || consumoEnlazado(p, m, l));
+          allow update: if false;
+          allow delete: if esDueno();
+        }
+
+        // Días trabajados. El empleado solo registra los suyos; el dueño, los de cualquiera.
+        match /dias/{d} {
+          allow read: if activo();
+          allow create: if activo()
+            && diaValido(request.resource.data)
+            && existsAfter(/databases/$(database)/documents/pedidos/$(p)/muebles/$(m))
+            && (request.resource.data.usuarioId == request.auth.uid || esDueno());
+          allow update: if false;
+          allow delete: if esDueno();
+        }
       }
 
       // Historial de precios: solo el dueño lo lee; inmutable.
