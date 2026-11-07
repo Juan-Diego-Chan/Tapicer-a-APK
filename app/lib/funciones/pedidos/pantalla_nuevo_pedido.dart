@@ -182,7 +182,9 @@ class _PantallaNuevoPedidoState extends ConsumerState<PantallaNuevoPedido> {
             ),
             TextFormField(
               controller: _direccion,
-              readOnly: soloLectura,
+              // Un cliente sin dirección permite escribirla para este pedido;
+              // el catálogo de clientes no se actualiza.
+              readOnly: soloLectura && _cliente!.direccion.trim().isNotEmpty,
               decoration: const InputDecoration(labelText: 'Dirección'),
               validator: (v) =>
                   _entrega == Entrega.domicilio && (v ?? '').trim().isEmpty

@@ -29,6 +29,13 @@ const _jose = Cliente(
   direccion: 'Calle 1',
 );
 
+const _ana = Cliente(
+  id: 'c2',
+  nombre: 'Ana Ruiz',
+  telefono: '5559876543',
+  direccion: '',
+);
+
 /// Simula el modo sin conexión: el id llega y la confirmación nunca.
 class _ServicioSinRed implements ServicioPedidos {
   @override
@@ -67,7 +74,7 @@ Future<FakeFirebaseFirestore> _montar(WidgetTester t,
       firestoreProvider.overrideWithValue(db),
       estadoSesionProvider
           .overrideWith((ref) => Stream.value(const SesionActiva(_usuario))),
-      clientesProvider.overrideWith((ref) => Stream.value([_jose])),
+      clientesProvider.overrideWith((ref) => Stream.value([_jose, _ana])),
       plantillasProvider.overrideWith((ref) => Stream.value([])),
       materialesProvider.overrideWith((ref) => Stream.value([])),
       if (servicio != null)
@@ -136,6 +143,27 @@ void main() {
 
     final pedidos = (await db.collection('pedidos').get()).docs;
     expect(pedidos.single.data()['clienteId'], 'c1');
+    expect((await db.collection('clientes').get()).docs, isEmpty);
+  });
+
+  testWidgets('cliente sin dirección permite escribirla a domicilio',
+      (t) async {
+    final db = await _montar(t);
+    await t.enterText(find.byKey(const Key('buscar-cliente')), 'Ana');
+    await t.pumpAndSettle();
+    await t.tap(find.text('Ana Ruiz'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('A domicilio'));
+    await t.pumpAndSettle();
+    await t.enterText(
+        find.widgetWithText(TextFormField, 'Dirección'), 'Av. Norte 9');
+    await t.enterText(find.widgetWithText(TextFormField, 'Envío'), '100');
+    await _agregarMueble(t, 'Sillón', '650');
+    await _guardar(t);
+
+    final pedidos = (await db.collection('pedidos').get()).docs;
+    expect(pedidos.single.data()['clienteId'], 'c2');
+    expect(pedidos.single.data()['cliente']['direccion'], 'Av. Norte 9');
     expect((await db.collection('clientes').get()).docs, isEmpty);
   });
 
