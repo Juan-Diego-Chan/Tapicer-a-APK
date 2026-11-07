@@ -55,6 +55,75 @@ service cloud.firestore {
       allow read, write: if esDueno();
     }
 
+    // ---- Inventario ----
+    function materialValido(d) {
+      return d.keys().hasOnly(['nombre', 'categoria', 'unidad', 'stockMinimo', 'existencia', 'usaRollos', 'marcadoAgotandose'])
+        && d.nombre is string && d.nombre.size() >= 1 && d.nombre.size() <= 100
+        && d.categoria in ['tela', 'espuma', 'guata', 'resortes', 'cinchas', 'grapas', 'otros']
+        && d.unidad in ['m', 'kg', 'pza', 'l']
+        && d.stockMinimo is number && d.stockMinimo >= 0
+        && d.existencia is number
+        && d.existencia == d.existencia
+        && d.existencia > -1000000000000000 && d.existencia < 1000000000000000
+        && d.usaRollos is bool
+        && d.marcadoAgotandose is bool;
+    }
+
+    function rolloValido(d) {
+      return d.keys().hasOnly(['materialId', 'codigo', 'cantidadInicial', 'existencia', 'fechaCompra'])
+        && d.materialId is string
+        && d.codigo is string && d.codigo.size() >= 1 && d.codigo.size() <= 20
+        && d.cantidadInicial is number && d.cantidadInicial > 0
+        && d.existencia is number
+        && d.fechaCompra is timestamp;
+    }
+
+    function movimientoValido(d) {
+      return d.keys().hasOnly(['tipo', 'materialId', 'rolloId', 'cantidad', 'pedidoId', 'muebleId', 'usuarioId', 'fecha'])
+        && d.tipo in ['compra', 'inicial', 'consumo', 'ajuste']
+        && d.materialId is string
+        && (d.get('rolloId', null) == null || d.rolloId is string)
+        && (d.get('pedidoId', null) == null || d.pedidoId is string)
+        && (d.get('muebleId', null) == null || d.muebleId is string)
+        && d.cantidad is number
+        && d.usuarioId == request.auth.uid
+        && d.fecha is timestamp;
+    }
+
+    match /materiales/{id} {
+      allow read: if activo();
+      allow create: if esDueno() && materialValido(request.resource.data);
+      allow update: if (esDueno() && materialValido(request.resource.data))
+        || (esEmpleado() && soloCambia(['marcadoAgotandose'])
+          && request.resource.data.marcadoAgotandose == true);
+      allow delete: if esDueno();
+    }
+
+    match /materiales_costos/{id} {
+      allow read, write: if esDueno();
+    }
+
+    match /rollos/{id} {
+      allow read: if activo();
+      allow create, update: if esDueno() && rolloValido(request.resource.data);
+      allow delete: if esDueno();
+    }
+
+    match /rollos_costos/{id} {
+      allow read, write: if esDueno();
+    }
+
+    match /compras/{id} {
+      allow read, write: if esDueno();
+    }
+
+    // Inmutables: las correcciones se hacen con un ajuste (nuevo movimiento).
+    match /movimientos/{id} {
+      allow read: if activo();
+      allow create: if esDueno() && movimientoValido(request.resource.data);
+      allow update, delete: if false;
+    }
+
     // Todo lo demas, denegado.
     match /{document=**} {
       allow read, write: if false;
