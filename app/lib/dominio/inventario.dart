@@ -45,8 +45,8 @@ String _texto(Map<String, dynamic> mapa, String campo) {
 
 double _numero(Map<String, dynamic> mapa, String campo) {
   final v = mapa[campo];
-  if (v is! num) {
-    throw FormatException('Campo "$campo" ausente o no es número: $v');
+  if (v is! num || !v.isFinite) {
+    throw FormatException('Campo "$campo" ausente o no es número finito: $v');
   }
   return v.toDouble();
 }
@@ -204,7 +204,8 @@ String siguienteCodigoRollo(Iterable<String> codigos) {
 double? leerCantidad(String texto) {
   final limpio = texto.trim().replaceAll(',', '.');
   if (limpio.isEmpty) return null;
-  return double.tryParse(limpio);
+  final valor = double.tryParse(limpio);
+  return valor != null && valor.isFinite ? valor : null;
 }
 
 String formatearCantidad(double c, Unidad u) {

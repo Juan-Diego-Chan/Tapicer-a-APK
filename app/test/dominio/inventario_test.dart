@@ -119,4 +119,28 @@ void main() {
     expect(() => Movimiento.desdeMapa('mv1', {...base, 'tipo': 'robo'}, fecha),
         throwsFormatException);
   });
+
+  test('leerCantidad rechaza no finitos y formatos ambiguos', () {
+    for (final t in ['NaN', 'Infinity', '-Infinity', '1e999', '1.2.3', '2,5,0', '1,234.5']) {
+      expect(leerCantidad(t), isNull, reason: t);
+    }
+  });
+
+  test('formatearCantidad casos límite', () {
+    expect(formatearCantidad(-0.001, Unidad.m), '0 m');
+    expect(formatearCantidad(10, Unidad.m), '10 m');
+  });
+
+  test('siguienteCodigoRollo con ceros a la izquierda', () {
+    expect(siguienteCodigoRollo(['#007']), '#8');
+  });
+
+  test('Material.desdeMapa rechaza campo ausente y NaN', () {
+    final sinUnidad = _mapaValido()..remove('unidad');
+    expect(() => Material.desdeMapa('x', sinUnidad), throwsFormatException);
+    expect(() => Material.desdeMapa('x', {..._mapaValido(), 'existencia': double.nan}),
+        throwsFormatException);
+    expect(() => Material.desdeMapa('x', {..._mapaValido(), 'existencia': double.infinity}),
+        throwsFormatException);
+  });
 }
