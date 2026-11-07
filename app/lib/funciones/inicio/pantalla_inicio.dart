@@ -32,6 +32,11 @@ const List<EntradaMenu> entradasMenu = [
       icono: Icons.shopping_cart,
       ruta: '/compras',
       soloDueno: true),
+  EntradaMenu(
+      titulo: 'Plantillas',
+      icono: Icons.list_alt,
+      ruta: '/plantillas',
+      soloDueno: true),
   EntradaMenu(titulo: 'Dinero', icono: Icons.payments, ruta: '/dinero'),
   EntradaMenu(
       titulo: 'Contabilidad',

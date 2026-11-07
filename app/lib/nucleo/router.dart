@@ -11,6 +11,7 @@ import '../funciones/compras/pantalla_lista_compras.dart';
 import '../funciones/inicio/pantalla_inicio.dart';
 import '../funciones/inventario/pantalla_inventario.dart';
 import '../funciones/inventario/pantalla_material.dart';
+import '../funciones/plantillas/pantalla_plantillas.dart';
 import '../funciones/usuarios/pantalla_usuarios.dart';
 import 'pantalla_proximamente.dart';
 
@@ -20,7 +21,12 @@ final _rutasSoloDueno = entradasMenu
     .toList();
 
 /// Rutas con pantalla real; el resto usa el marcador "Próximamente".
-const _rutasConPantalla = {'/usuarios', '/inventario', '/compras'};
+const _rutasConPantalla = {
+  '/usuarios',
+  '/inventario',
+  '/compras',
+  '/plantillas',
+};
 
 /// Lógica pura de guardia. Devuelve la ruta destino o null si no hay que
 /// redirigir.
@@ -80,6 +86,10 @@ GoRouter crearRouter(Ref ref) {
       GoRoute(
         path: '/compras',
         builder: (_, _) => const PantallaListaCompras(),
+      ),
+      GoRoute(
+        path: '/plantillas',
+        builder: (_, _) => const PantallaPlantillas(),
       ),
       for (final e in entradasMenu.where(
         (e) => !_rutasConPantalla.contains(e.ruta),

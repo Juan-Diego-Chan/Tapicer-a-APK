@@ -25,7 +25,7 @@ void main() {
   });
   test('empleado no entra a rutas solo dueño', () {
     final emp = _sesion(Rol.empleado);
-    for (final r in ['/usuarios', '/compras', '/contabilidad']) {
+    for (final r in ['/usuarios', '/compras', '/contabilidad', '/plantillas']) {
       expect(redirigir(emp, r), '/');
     }
     expect(redirigir(emp, '/usuarios/x'), '/');
@@ -38,7 +38,7 @@ void main() {
   });
   test('dueño entra a rutas solo dueño', () {
     final due = _sesion(Rol.dueno);
-    for (final r in ['/usuarios', '/compras', '/contabilidad']) {
+    for (final r in ['/usuarios', '/compras', '/contabilidad', '/plantillas']) {
       expect(redirigir(due, r), isNull);
     }
   });
