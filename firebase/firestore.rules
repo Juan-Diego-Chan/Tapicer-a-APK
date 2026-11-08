@@ -441,9 +441,18 @@ service cloud.firestore {
         && d.get('ultimaEntregaId', null) == campoCajaPrevio('ultimaEntregaId');
     }
 
-    // Entrega de efectivo al dueño confirmada. La define la Tarea 4.
+    function rutaEntrega(id) { return /databases/$(database)/documents/entregas/$(id); }
+
+    // El dueño confirma en este lote una entrega pendiente de {uid}: la caja baja su monto.
     function entregaConfirmada(uid) {
-      return false;
+      let d = request.resource.data;
+      let ruta = rutaEntrega(d.get('ultimaEntregaId', 'ninguna'));
+      return esDueno()
+        && d.get('ultimoPagoId', null) == campoCajaPrevio('ultimoPagoId')
+        && get(ruta).data.estado == 'pendiente'
+        && getAfter(ruta).data.estado == 'confirmada'
+        && get(ruta).data.empleadoId == uid
+        && igualDinero(d.enMano - enManoPrevio(), -get(ruta).data.monto);
     }
 
     match /pagos/{id} {
@@ -465,6 +474,41 @@ service cloud.firestore {
       allow create, update: if cajaValida(request.resource.data)
         && (cobroEnCaja(uid) || pagoBorradoEnCaja(uid) || entregaConfirmada(uid));
       allow delete: if false;
+    }
+
+    // Entregas de dinero del empleado al dueño. Nadie las borra.
+    match /entregas/{id} {
+      allow read: if esDueno() || (activo() && resource.data.empleadoId == request.auth.uid);
+      allow create: if esEmpleado()
+        && request.resource.data.keys().hasOnly(['empleadoId', 'monto', 'forma', 'fecha', 'estado', 'revisadoEn'])
+        && request.resource.data.empleadoId == request.auth.uid
+        && dinero(request.resource.data.monto) && request.resource.data.monto > 0
+        && request.resource.data.forma in ['efectivo', 'transferencia']
+        && request.resource.data.fecha == request.time
+        && request.resource.data.estado == 'pendiente'
+        && request.resource.data.revisadoEn == null;
+      // Confirmar exige que la caja del empleado baje el monto en el mismo lote.
+      allow update: if esDueno()
+        && resource.data.estado == 'pendiente'
+        && soloCambia(['estado', 'revisadoEn'])
+        && request.resource.data.revisadoEn == request.time
+        && (request.resource.data.estado == 'rechazada'
+          || (request.resource.data.estado == 'confirmada'
+            && getAfter(rutaCaja(resource.data.empleadoId)).data.ultimaEntregaId == id
+            && igualDinero(getAfter(rutaCaja(resource.data.empleadoId)).data.enMano
+              - enManoAntes(rutaCaja(resource.data.empleadoId)), -resource.data.monto)));
+      allow delete: if false;
+    }
+
+    // Pagos de sueldo: solo el dueño.
+    match /pagos_sueldo/{id} {
+      allow read, delete: if esDueno();
+      allow create: if esDueno()
+        && request.resource.data.keys().hasOnly(['usuarioId', 'monto', 'fecha'])
+        && request.resource.data.usuarioId is string
+        && dinero(request.resource.data.monto) && request.resource.data.monto > 0
+        && request.resource.data.fecha is timestamp;
+      allow update: if false;
     }
 
     match /clientes/{id} {
