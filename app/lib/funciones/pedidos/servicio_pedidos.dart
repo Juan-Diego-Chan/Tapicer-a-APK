@@ -31,7 +31,7 @@ class ServicioPedidos {
     'tipoTrabajo': m.tipoTrabajo.clave,
     'tipoMueble': m.tipoMueble.trim(),
     'plantillaId': m.plantillaId,
-    'precio': m.precio,
+    'precio': redondear2(m.precio),
     'comentarios': m.comentarios.trim(),
     'estado': EstadoMueble.recibido.clave,
     'ultimoCambioId': cambioId,

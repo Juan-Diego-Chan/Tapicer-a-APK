@@ -253,6 +253,21 @@ void main() {
     expect(doc['ultimoCambioId'], cambios.docs.single.id);
   });
 
+  test('agregarMueble redondea el precio igual que su registro', () async {
+    final r = crear(muebles: [sofa]);
+    await r.guardado;
+    final (p, m) = await leer(r.pedidoId);
+    const nuevo = NuevoMueble(
+        tipoTrabajo: TipoTrabajo.reparacion,
+        tipoMueble: 'Silla',
+        precio: 600.005);
+    await servicio.agregarMueble(pedido: p, muebles: m, nuevo: nuevo);
+    final c = (await cambiosDe(r.pedidoId).get()).docs.single.data();
+    final (_, m2) = await leer(r.pedidoId);
+    final creado = m2.firstWhere((x) => x.tipoMueble == 'Silla');
+    expect(creado.precio, c['nuevo']);
+  });
+
   test('cancelar un mueble deja el registro de cancelación', () async {
     final r = crear();
     await r.guardado;
@@ -264,6 +279,7 @@ void main() {
     expect(cambios.size, 1);
     final c = cambios.docs.single.data();
     expect(c['campo'], 'cancelacion');
+    expect(c['usuarioId'], 'u1');
     expect(c['muebleId'], s.id);
     expect(c['anterior'], 650);
     expect(c['nuevo'], 0);
