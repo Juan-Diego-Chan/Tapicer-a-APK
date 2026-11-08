@@ -130,9 +130,11 @@ ResumenPeriodo _lleno(Periodo p, {bool incompleto = false}) {
   );
 }
 
+Periodo _inicial = Periodo.semana(DateTime(2026, 11, 7));
+
 class _PeriodoFijo extends PeriodoNotifier {
   @override
-  Periodo build() => Periodo.semana(DateTime(2026, 11, 7));
+  Periodo build() => _inicial;
 }
 
 Future<void> _montar(
@@ -142,7 +144,9 @@ Future<void> _montar(
   bool error = false,
   bool sinCajas = false,
   GoRouter? router,
+  Periodo? inicial,
 }) async {
+  _inicial = inicial ?? Periodo.semana(DateTime(2026, 11, 7));
   t.view.physicalSize = const Size(800, 6000);
   t.view.devicePixelRatio = 1;
   addTearDown(t.view.reset);
@@ -290,5 +294,22 @@ void main() {
     expect(find.byType(AppBar), findsNothing);
     expect(find.text('Contabilidad'), findsNothing);
     expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  testWidgets('en un rango se puede volver a abrir el selector', (t) async {
+    await _montar(t,
+        inicial: Periodo.rango(DateTime(2026, 11, 1), DateTime(2026, 11, 3)));
+    expect(find.byTooltip('Periodo anterior'), findsNothing);
+    await t.tap(find.byTooltip('Cambiar rango'));
+    await t.pumpAndSettle();
+    expect(find.byType(DateRangePickerDialog), findsOneWidget);
+  });
+
+  testWidgets('una semana que cruza de mes cambia al mes de su último día',
+      (t) async {
+    await _montar(t, inicial: Periodo.semana(DateTime(2026, 10, 26)));
+    await t.tap(find.text('Mes'));
+    await t.pumpAndSettle();
+    expect(find.text('Noviembre 2026'), findsOneWidget);
   });
 }

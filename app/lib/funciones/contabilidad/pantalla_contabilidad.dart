@@ -58,6 +58,9 @@ class _SelectorPeriodo extends ConsumerWidget {
 
   final Periodo periodo;
 
+  DateTime get _ultimoDia =>
+      DateTime(periodo.hasta.year, periodo.hasta.month, periodo.hasta.day - 1);
+
   Future<void> _elegirRango(BuildContext context, WidgetRef ref) async {
     final hoy = DateTime.now();
     final r = await showDateRangePicker(
@@ -66,11 +69,7 @@ class _SelectorPeriodo extends ConsumerWidget {
       lastDate: DateTime(hoy.year, hoy.month, hoy.day + 1),
       initialDateRange: DateTimeRange(
         start: periodo.desde,
-        end: DateTime(
-          periodo.hasta.year,
-          periodo.hasta.month,
-          periodo.hasta.day - 1,
-        ),
+        end: _ultimoDia,
       ),
     );
     if (r == null) return;
@@ -95,9 +94,9 @@ class _SelectorPeriodo extends ConsumerWidget {
             onSelectionChanged: (s) {
               switch (s.first) {
                 case TipoPeriodo.semana:
-                  notifier.cambiar(Periodo.semana(periodo.desde));
+                  notifier.cambiar(Periodo.semana(_ultimoDia));
                 case TipoPeriodo.mes:
-                  notifier.cambiar(Periodo.mes(periodo.desde));
+                  notifier.cambiar(Periodo.mes(_ultimoDia));
                 case TipoPeriodo.rango:
                   _elegirRango(context, ref);
               }
@@ -105,6 +104,12 @@ class _SelectorPeriodo extends ConsumerWidget {
           ),
           Row(
             children: [
+              if (!navegable)
+                IconButton(
+                  tooltip: 'Cambiar rango',
+                  icon: const Icon(Icons.date_range),
+                  onPressed: () => _elegirRango(context, ref),
+                ),
               if (navegable)
                 IconButton(
                   tooltip: 'Periodo anterior',
