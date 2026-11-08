@@ -141,10 +141,16 @@ class _Detalle extends ConsumerWidget {
               ChoiceChip(
                 label: Text(e.etiqueta),
                 selected: mueble.estado == e,
-                onSelected: (_) => _cambiarEstado(context, ref, e),
+                onSelected: mueble.estado == EstadoMueble.cancelado
+                    ? null
+                    : (_) => _cambiarEstado(context, ref, e),
               ),
           ],
         ),
+        if (mueble.estado == EstadoMueble.cancelado) ...[
+          const SizedBox(height: 8),
+          const Text('Un mueble cancelado no se puede reactivar'),
+        ],
         const Divider(height: 32),
         _SeccionMateriales(pedidoId: pedido.id, muebleId: mueble.id),
         const Divider(height: 32),

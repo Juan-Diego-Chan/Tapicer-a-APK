@@ -249,10 +249,19 @@ class _HistorialPrecios extends ConsumerWidget {
 
     String concepto(CambioPrecio c) {
       if (c.campo == CampoPrecio.envio) return 'Envío';
+      final prefijo = switch (c.campo) {
+        CampoPrecio.alta => 'Mueble agregado: ',
+        CampoPrecio.cancelacion => 'Mueble cancelado: ',
+        _ => 'Precio de ',
+      };
       for (final m in muebles) {
-        if (m.id == c.muebleId) return 'Precio de ${m.tipoMueble}';
+        if (m.id == c.muebleId) return '$prefijo${m.tipoMueble}';
       }
-      return 'Precio de mueble';
+      return switch (c.campo) {
+        CampoPrecio.alta => 'Mueble agregado',
+        CampoPrecio.cancelacion => 'Mueble cancelado',
+        _ => 'Precio de mueble',
+      };
     }
 
     final contenido = cambios.when(

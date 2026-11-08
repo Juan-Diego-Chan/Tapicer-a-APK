@@ -23,6 +23,7 @@ Future<FakeFirebaseFirestore> _montar(
   WidgetTester t,
   Rol rol, {
   bool conCambio = false,
+  bool conCancelacion = false,
   void Function()? alSuscribirCambios,
   String estadoPedido = 'recibido',
   String estadoMuebles = 'recibido',
@@ -68,6 +69,17 @@ Future<FakeFirebaseFirestore> _montar(
       'motivo': 'Descuento',
       'usuarioId': 'u1',
       'fecha': Timestamp.fromDate(DateTime(2026, 1, 5)),
+    });
+  }
+  if (conCancelacion) {
+    await ref.collection('cambios_precio').add({
+      'campo': 'cancelacion',
+      'muebleId': 'm2',
+      'anterior': 650,
+      'nuevo': 0,
+      'motivo': null,
+      'usuarioId': 'u1',
+      'fecha': Timestamp.fromDate(DateTime(2026, 1, 6)),
     });
   }
   await t.pumpWidget(ProviderScope(
@@ -153,6 +165,14 @@ void main() {
     final cs = Theme.of(t.element(find.byType(Scaffold).first)).colorScheme;
     expect(t.widget<Text>(fila).style?.color, cs.error);
     expect(find.textContaining('Descuento'), findsOneWidget);
+  });
+
+  testWidgets('el historial muestra la cancelación en rojo', (t) async {
+    await _montar(t, Rol.dueno, conCancelacion: true);
+    final fila = find.text('Mueble cancelado: Silla: \$650.00 → \$0.00');
+    expect(fila, findsOneWidget);
+    final cs = Theme.of(t.element(find.byType(Scaffold).first)).colorScheme;
+    expect(t.widget<Text>(fila).style?.color, cs.error);
   });
 
   testWidgets('el dueño sin cambios ve "Sin cambios de precio"', (t) async {

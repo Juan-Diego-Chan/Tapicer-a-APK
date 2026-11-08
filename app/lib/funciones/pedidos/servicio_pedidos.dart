@@ -27,15 +27,31 @@ class ServicioPedidos {
 
   ServicioPedidos(this._db, this._usuarioId);
 
-  Map<String, dynamic> _datosMueble(NuevoMueble m) => {
-        'tipoTrabajo': m.tipoTrabajo.clave,
-        'tipoMueble': m.tipoMueble.trim(),
-        'plantillaId': m.plantillaId,
-        'precio': m.precio,
-        'comentarios': m.comentarios.trim(),
-        'estado': EstadoMueble.recibido.clave,
-        'ultimoCambioId': null,
-      };
+  Map<String, dynamic> _datosMueble(NuevoMueble m, {String? cambioId}) => {
+    'tipoTrabajo': m.tipoTrabajo.clave,
+    'tipoMueble': m.tipoMueble.trim(),
+    'plantillaId': m.plantillaId,
+    'precio': m.precio,
+    'comentarios': m.comentarios.trim(),
+    'estado': EstadoMueble.recibido.clave,
+    'ultimoCambioId': cambioId,
+  };
+
+  /// Registro de historial sin motivo para altas y cancelaciones.
+  Map<String, dynamic> _registroAltaCancelacion(
+    CampoPrecio campo,
+    String muebleId,
+    double anterior,
+    double nuevo,
+  ) => {
+    'campo': campo.name,
+    'muebleId': muebleId,
+    'anterior': anterior,
+    'nuevo': nuevo,
+    'motivo': null,
+    'usuarioId': _usuarioId,
+    'fecha': FieldValue.serverTimestamp(),
+  };
 
   void _validarMueble(NuevoMueble m) {
     if (!m.precio.isFinite || m.precio < 0) {
@@ -166,11 +182,22 @@ class ServicioPedidos {
     _validarMueble(nuevo);
     final batch = _db.batch();
     final pedidoRef = _db.collection('pedidos').doc(pedido.id);
-    batch.set(pedidoRef.collection('muebles').doc(), _datosMueble(nuevo));
-    final cambios = _cambiosDeEstado(
-        pedido,
-        [for (final m in muebles) m.estado, EstadoMueble.recibido],
-        ahora ?? DateTime.now());
+    final muebleRef = pedidoRef.collection('muebles').doc();
+    final cambioRef = pedidoRef.collection('cambios_precio').doc();
+    batch.set(
+      cambioRef,
+      _registroAltaCancelacion(
+        CampoPrecio.alta,
+        muebleRef.id,
+        0,
+        redondear2(nuevo.precio),
+      ),
+    );
+    batch.set(muebleRef, _datosMueble(nuevo, cambioId: cambioRef.id));
+    final cambios = _cambiosDeEstado(pedido, [
+      for (final m in muebles) m.estado,
+      EstadoMueble.recibido,
+    ], ahora ?? DateTime.now());
     if (cambios != null) batch.update(pedidoRef, cambios);
     return batch.commit();
   }
@@ -185,16 +212,39 @@ class ServicioPedidos {
     if (!muebles.any((m) => m.id == muebleId)) {
       throw ArgumentError('El mueble no pertenece al pedido');
     }
+    final actual = muebles.firstWhere((m) => m.id == muebleId);
+    if (actual.estado == EstadoMueble.cancelado) {
+      throw ArgumentError('Un mueble cancelado no se puede reactivar');
+    }
     final batch = _db.batch();
     final pedidoRef = _db.collection('pedidos').doc(pedido.id);
-    batch.update(pedidoRef.collection('muebles').doc(muebleId),
-        {'estado': nuevo.clave});
-    final cambios = _cambiosDeEstado(
-        pedido,
-        [for (final m in muebles) m.id == muebleId ? nuevo : m.estado],
-        ahora ?? DateTime.now());
+    final muebleRef = pedidoRef.collection('muebles').doc(muebleId);
+    if (nuevo == EstadoMueble.cancelado) {
+      _cancelarEnLote(batch, pedidoRef, actual);
+    } else {
+      batch.update(muebleRef, {'estado': nuevo.clave});
+    }
+    final cambios = _cambiosDeEstado(pedido, [
+      for (final m in muebles) m.id == muebleId ? nuevo : m.estado,
+    ], ahora ?? DateTime.now());
     if (cambios != null) batch.update(pedidoRef, cambios);
     return batch.commit();
+  }
+
+  void _cancelarEnLote(
+    WriteBatch batch,
+    DocumentReference<Map<String, dynamic>> pedidoRef,
+    Mueble m,
+  ) {
+    final cambioRef = pedidoRef.collection('cambios_precio').doc();
+    batch.set(
+      cambioRef,
+      _registroAltaCancelacion(CampoPrecio.cancelacion, m.id, m.precio, 0),
+    );
+    batch.update(pedidoRef.collection('muebles').doc(m.id), {
+      'estado': EstadoMueble.cancelado.clave,
+      'ultimoCambioId': cambioRef.id,
+    });
   }
 
   /// Los muebles ya entregados no cambian.
@@ -213,8 +263,7 @@ class ServicioPedidos {
         continue;
       }
       estados.add(EstadoMueble.cancelado);
-      batch.update(pedidoRef.collection('muebles').doc(m.id),
-          {'estado': EstadoMueble.cancelado.clave});
+      _cancelarEnLote(batch, pedidoRef, m);
     }
     final cambios = _cambiosDeEstado(pedido, estados, ahora ?? DateTime.now());
     if (cambios != null) batch.update(pedidoRef, cambios);

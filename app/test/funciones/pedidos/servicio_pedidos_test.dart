@@ -226,6 +226,88 @@ void main() {
     expect(p2.estado, EstadoMueble.recibido);
   });
 
+  test('agregarMueble deja el registro de alta y lo enlaza', () async {
+    final r = crear(muebles: [sofa]);
+    await r.guardado;
+    final (p, m) = await leer(r.pedidoId);
+    const nuevo = NuevoMueble(
+        tipoTrabajo: TipoTrabajo.reparacion, tipoMueble: 'Silla', precio: 600);
+    await servicio.agregarMueble(pedido: p, muebles: m, nuevo: nuevo);
+    final cambios = await cambiosDe(r.pedidoId).get();
+    expect(cambios.size, 1);
+    final c = cambios.docs.single.data();
+    expect(c['campo'], 'alta');
+    expect(c['anterior'], 0);
+    expect(c['nuevo'], 600);
+    expect(c['motivo'], isNull);
+    expect(c['usuarioId'], 'u1');
+    final (_, m2) = await leer(r.pedidoId);
+    final creado = m2.firstWhere((x) => x.tipoMueble == 'Silla');
+    expect(c['muebleId'], creado.id);
+    final doc = await db
+        .collection('pedidos')
+        .doc(r.pedidoId)
+        .collection('muebles')
+        .doc(creado.id)
+        .get();
+    expect(doc['ultimoCambioId'], cambios.docs.single.id);
+  });
+
+  test('cancelar un mueble deja el registro de cancelación', () async {
+    final r = crear();
+    await r.guardado;
+    final (p, m) = await leer(r.pedidoId);
+    final s = m.firstWhere((x) => x.tipoMueble == 'Sofá');
+    await servicio.cambiarEstadoMueble(
+        pedido: p, muebles: m, muebleId: s.id, nuevo: EstadoMueble.cancelado);
+    final cambios = await cambiosDe(r.pedidoId).get();
+    expect(cambios.size, 1);
+    final c = cambios.docs.single.data();
+    expect(c['campo'], 'cancelacion');
+    expect(c['muebleId'], s.id);
+    expect(c['anterior'], 650);
+    expect(c['nuevo'], 0);
+    expect(c['motivo'], isNull);
+    final doc = await db
+        .collection('pedidos')
+        .doc(r.pedidoId)
+        .collection('muebles')
+        .doc(s.id)
+        .get();
+    expect(doc['ultimoCambioId'], cambios.docs.single.id);
+    expect(doc['estado'], 'cancelado');
+  });
+
+  test('cancelarPedido deja un registro por mueble que cancela', () async {
+    final r = crear(muebles: [sofa, silla, sofa]);
+    await r.guardado;
+    var (p, m) = await leer(r.pedidoId);
+    await servicio.cambiarEstadoMueble(
+        pedido: p,
+        muebles: m,
+        muebleId: m.first.id,
+        nuevo: EstadoMueble.entregado);
+    (p, m) = await leer(r.pedidoId);
+    await servicio.cancelarPedido(pedido: p, muebles: m);
+    final cambios = await cambiosDe(r.pedidoId).get();
+    expect(cambios.size, 2);
+    expect(cambios.docs.map((d) => d.data()['campo']).toSet(), {'cancelacion'});
+  });
+
+  test('un mueble cancelado no se puede reactivar', () async {
+    final r = crear();
+    await r.guardado;
+    var (p, m) = await leer(r.pedidoId);
+    final id = m.first.id;
+    await servicio.cambiarEstadoMueble(
+        pedido: p, muebles: m, muebleId: id, nuevo: EstadoMueble.cancelado);
+    (p, m) = await leer(r.pedidoId);
+    expect(
+        () => servicio.cambiarEstadoMueble(
+            pedido: p, muebles: m, muebleId: id, nuevo: EstadoMueble.recibido),
+        throwsArgumentError);
+  });
+
   test('cambiarPrecioMueble registra el cambio', () async {
     final r = crear();
     await r.guardado;
