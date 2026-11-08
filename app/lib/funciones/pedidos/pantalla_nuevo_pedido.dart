@@ -2,6 +2,7 @@ import 'package:flutter/material.dart' hide Material;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../dominio/dinero.dart';
 import '../../dominio/inventario.dart';
 import '../../dominio/pedidos.dart';
 import '../../nucleo/formatos.dart';
@@ -25,6 +26,8 @@ class _PantallaNuevoPedidoState extends ConsumerState<PantallaNuevoPedido> {
   final _direccion = TextEditingController();
   final _envio = TextEditingController();
   final _comentarios = TextEditingController();
+  final _anticipo = TextEditingController();
+  FormaPago _formaAnticipo = FormaPago.efectivo;
   final _muebles = <NuevoMueble>[];
   Cliente? _cliente;
   Entrega _entrega = Entrega.recoge;
@@ -45,6 +48,7 @@ class _PantallaNuevoPedidoState extends ConsumerState<PantallaNuevoPedido> {
       _direccion,
       _envio,
       _comentarios,
+      _anticipo,
     ]) {
       c.dispose();
     }
@@ -72,6 +76,9 @@ class _PantallaNuevoPedidoState extends ConsumerState<PantallaNuevoPedido> {
 
   double get _envioNumero =>
       _entrega == Entrega.domicilio ? (leerDinero(_envio.text) ?? 0) : 0;
+
+  double get _anticipoNumero =>
+      _anticipo.text.trim().isEmpty ? 0 : (leerDinero(_anticipo.text) ?? 0);
 
   Future<void> _elegirFecha() async {
     final h = DateTime.now();
@@ -115,6 +122,8 @@ class _PantallaNuevoPedidoState extends ConsumerState<PantallaNuevoPedido> {
         comentarios: _comentarios.text,
         fechaEstimada: _fechaEstimada,
         muebles: List.of(_muebles),
+        anticipo: _anticipoNumero,
+        formaAnticipo: _formaAnticipo,
       );
     } on ArgumentError catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('${e.message}')));
@@ -122,8 +131,9 @@ class _PantallaNuevoPedidoState extends ConsumerState<PantallaNuevoPedido> {
     }
     // Sin await: sin conexión el Future no termina y hay que seguir.
     resultado.guardado.catchError((Object _) {
-      messenger
-          .showSnackBar(const SnackBar(content: Text('No se pudo guardar')));
+      messenger.showSnackBar(
+        const SnackBar(content: Text('No se pudo guardar')),
+      );
     });
     // Reemplaza solo esta pantalla: `go` rehace la pila y pierde el menú.
     router.pushReplacement('/pedidos/${resultado.pedidoId}');
@@ -136,8 +146,9 @@ class _PantallaNuevoPedidoState extends ConsumerState<PantallaNuevoPedido> {
     final sugeridos = consulta.trim().isEmpty
         ? const <Cliente>[]
         : clientes.where((c) => coincideCliente(c, consulta)).take(5).toList();
-    final total =
-        totalPedido([for (final m in _muebles) m.precio], _envioNumero);
+    final total = totalPedido([
+      for (final m in _muebles) m.precio,
+    ], _envioNumero);
     const decimal = TextInputType.numberWithOptions(decimal: true);
     final soloLectura = _cliente != null;
 
@@ -192,8 +203,8 @@ class _PantallaNuevoPedidoState extends ConsumerState<PantallaNuevoPedido> {
               decoration: const InputDecoration(labelText: 'Dirección'),
               validator: (v) =>
                   _entrega == Entrega.domicilio && (v ?? '').trim().isEmpty
-                      ? 'Escribe la dirección de entrega'
-                      : null,
+                  ? 'Escribe la dirección de entrega'
+                  : null,
             ),
             if (soloLectura)
               Align(
@@ -273,8 +284,34 @@ class _PantallaNuevoPedidoState extends ConsumerState<PantallaNuevoPedido> {
               ),
             ),
             const Divider(),
-            Text('Total: ${formatearDinero(total)}',
-                style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'Total: ${formatearDinero(total)}',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            TextFormField(
+              controller: _anticipo,
+              keyboardType: decimal,
+              decoration: const InputDecoration(
+                labelText: 'Anticipo (opcional)',
+              ),
+              onChanged: (_) => setState(() {}),
+              validator: (v) =>
+                  (v ?? '').trim().isNotEmpty && leerDinero(v!) == null
+                  ? 'Escribe un monto válido'
+                  : null,
+            ),
+            if (_anticipoNumero > 0) ...[
+              const SizedBox(height: 8),
+              SegmentedButton<FormaPago>(
+                segments: [
+                  for (final f in FormaPago.values)
+                    ButtonSegment(value: f, label: Text(f.etiqueta)),
+                ],
+                selected: {_formaAnticipo},
+                onSelectionChanged: (s) =>
+                    setState(() => _formaAnticipo = s.first),
+              ),
+            ],
             const SizedBox(height: 16),
             FilledButton(
               onPressed: _guardar,

@@ -30,6 +30,7 @@ void main() {
     String direccion = 'Calle 1',
     DateTime? fecha,
     List<NuevoMueble> muebles = const [sofa, silla],
+    double anticipo = 0,
   }) =>
       servicio.crearPedido(
         clienteId: clienteId,
@@ -42,6 +43,7 @@ void main() {
         fechaEstimada: fecha ?? manana,
         muebles: muebles,
         ahora: ahora,
+        anticipo: anticipo,
       );
 
   Future<int> contar(String c) async => (await db.collection(c).get()).size;
@@ -92,6 +94,38 @@ void main() {
         throwsArgumentError);
     expect(await contar('clientes'), 0);
     expect(await contar('pedidos'), 0);
+  });
+
+  test('anticipo de 500 crea el pago, pagado y la caja', () async {
+    final r = crear(anticipo: 500);
+    await r.guardado;
+    final pagos = (await db.collection('pagos').get()).docs;
+    expect(pagos.length, 1);
+    expect(pagos.single.data()['monto'], 500);
+    expect(pagos.single.data()['pedidoId'], r.pedidoId);
+    final doc = await db.collection('pedidos').doc(r.pedidoId).get();
+    expect(doc.data()!['pagado'], 500);
+    expect(doc.data()!['ultimoPagoId'], pagos.single.id);
+    final caja = await db.collection('cajas').doc('u1').get();
+    expect(caja.data()!['enMano'], 500);
+  });
+
+  test('sin anticipo no crea pago y pagado es 0', () async {
+    final r = crear();
+    await r.guardado;
+    expect(await contar('pagos'), 0);
+    final doc = await db.collection('pedidos').doc(r.pedidoId).get();
+    expect(doc.data()!['pagado'], 0);
+    expect(doc.data()!['ultimoPagoId'], isNull);
+  });
+
+  test('anticipo inválido lanza y no escribe', () async {
+    // total = 650 + 100 + 200 = 950
+    expect(() => crear(anticipo: 2000), throwsArgumentError);
+    expect(() => crear(anticipo: -1), throwsArgumentError);
+    expect(() => crear(anticipo: double.nan), throwsArgumentError);
+    expect(await contar('pedidos'), 0);
+    expect(await contar('pagos'), 0);
   });
 
   test('crearPedido devuelve el id antes de esperar guardado', () {

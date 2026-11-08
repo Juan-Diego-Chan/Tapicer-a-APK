@@ -5,6 +5,7 @@ import 'package:flutter/material.dart' hide Material;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tapiceria/dominio/dinero.dart';
 import 'package:tapiceria/dominio/pedidos.dart';
 import 'package:tapiceria/dominio/usuario.dart';
 import 'package:tapiceria/funciones/auth/providers.dart';
@@ -50,6 +51,8 @@ class _ServicioSinRed implements ServicioPedidos {
     required DateTime fechaEstimada,
     required List<NuevoMueble> muebles,
     DateTime? ahora,
+    double anticipo = 0,
+    FormaPago formaAnticipo = FormaPago.efectivo,
   }) =>
       (pedidoId: 'ped-offline', guardado: Completer<void>().future);
 
@@ -191,6 +194,35 @@ void main() {
     await _agregarMueble(t, 'Sillón', '650');
     await _guardar(t);
     expect(find.text('Escribe la dirección de entrega'), findsOneWidget);
+    expect((await db.collection('pedidos').get()).docs, isEmpty);
+  });
+
+  testWidgets('anticipo de 500 crea el pago', (t) async {
+    final db = await _montar(t);
+    await t.enterText(find.widgetWithText(TextFormField, 'Nombre'), 'Luis');
+    await _agregarMueble(t, 'Sillón', '650');
+    expect(find.text('Transferencia'), findsNothing);
+    await t.enterText(
+        find.widgetWithText(TextFormField, 'Anticipo (opcional)'), '500');
+    await t.pumpAndSettle();
+    expect(find.text('Transferencia'), findsOneWidget);
+    await _guardar(t);
+
+    final pagos = (await db.collection('pagos').get()).docs;
+    expect(pagos.single.data()['monto'], 500);
+    expect(pagos.single.data()['forma'], 'efectivo');
+    final pedido = (await db.collection('pedidos').get()).docs.single;
+    expect(pedido.data()['pagado'], 500);
+  });
+
+  testWidgets('anticipo inválido muestra el error', (t) async {
+    final db = await _montar(t);
+    await t.enterText(find.widgetWithText(TextFormField, 'Nombre'), 'Luis');
+    await _agregarMueble(t, 'Sillón', '650');
+    await t.enterText(
+        find.widgetWithText(TextFormField, 'Anticipo (opcional)'), 'abc');
+    await _guardar(t);
+    expect(find.text('Escribe un monto válido'), findsOneWidget);
     expect((await db.collection('pedidos').get()).docs, isEmpty);
   });
 

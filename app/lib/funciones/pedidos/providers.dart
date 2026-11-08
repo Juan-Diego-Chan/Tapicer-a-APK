@@ -27,7 +27,8 @@ final servicioPedidosProvider = Provider<ServicioPedidos>((ref) {
   if (estado is! SesionActiva) {
     throw StateError('No hay sesión activa');
   }
-  return ServicioPedidos(ref.watch(firestoreProvider), estado.usuario.uid);
+  return ServicioPedidos(ref.watch(firestoreProvider), estado.usuario.uid,
+      rol: estado.usuario.rol);
 });
 
 final repositorioTrabajoProvider = Provider<RepositorioTrabajo>(

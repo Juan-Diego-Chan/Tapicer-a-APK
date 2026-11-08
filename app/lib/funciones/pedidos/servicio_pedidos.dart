@@ -1,7 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../dominio/dinero.dart';
 import '../../dominio/inventario.dart';
 import '../../dominio/pedidos.dart';
+import '../../dominio/usuario.dart';
+import '../dinero/servicio_dinero.dart';
 
 class NuevoMueble {
   final TipoTrabajo tipoTrabajo;
@@ -24,8 +27,11 @@ class NuevoMueble {
 class ServicioPedidos {
   final FirebaseFirestore _db;
   final String _usuarioId;
+  final Rol _rol;
 
-  ServicioPedidos(this._db, this._usuarioId);
+  ServicioPedidos(this._db, this._usuarioId, {Rol rol = Rol.empleado})
+    // ignore: prefer_initializing_formals
+    : _rol = rol;
 
   Map<String, dynamic> _datosMueble(NuevoMueble m, {String? cambioId}) => {
     'tipoTrabajo': m.tipoTrabajo.clave,
@@ -84,6 +90,8 @@ class ServicioPedidos {
     required DateTime fechaEstimada,
     required List<NuevoMueble> muebles,
     DateTime? ahora,
+    double anticipo = 0,
+    FormaPago formaAnticipo = FormaPago.efectivo,
   }) {
     final momento = ahora ?? DateTime.now();
     if (muebles.isEmpty) throw ArgumentError('Agrega al menos un mueble');
@@ -98,9 +106,22 @@ class ServicioPedidos {
       throw ArgumentError('Falta la dirección');
     }
     muebles.forEach(_validarMueble);
+    if (!anticipo.isFinite || anticipo < 0) {
+      throw ArgumentError('El anticipo no puede ser negativo');
+    }
+    final pagadoInicial = redondear2(anticipo);
+    final total = redondear2(
+      totalPedido([for (final m in muebles) m.precio], envio),
+    );
+    if (pagadoInicial > total) {
+      throw ArgumentError('El anticipo es mayor que el total');
+    }
     final hoy = DateTime(momento.year, momento.month, momento.day);
-    final dia =
-        DateTime(fechaEstimada.year, fechaEstimada.month, fechaEstimada.day);
+    final dia = DateTime(
+      fechaEstimada.year,
+      fechaEstimada.month,
+      fechaEstimada.day,
+    );
     if (dia.isBefore(hoy)) {
       throw ArgumentError('La fecha estimada no puede ser anterior a hoy');
     }
@@ -118,6 +139,14 @@ class ServicioPedidos {
       batch.set(ref, datosCliente);
     }
     final pedidoRef = _db.collection('pedidos').doc();
+    final pagoId = pagadoInicial > 0
+        ? ServicioDinero(_db, _usuarioId, _rol).agregarPagoAlLote(
+            batch,
+            pedidoId: pedidoRef.id,
+            monto: pagadoInicial,
+            forma: formaAnticipo,
+          )
+        : null;
     batch.set(pedidoRef, {
       'folio': folioPara(momento, pedidoRef.id),
       'clienteId': idCliente,
@@ -132,6 +161,8 @@ class ServicioPedidos {
       'estado': EstadoMueble.recibido.clave,
       'creadoPor': _usuarioId,
       'ultimoCambioId': null,
+      'pagado': pagadoInicial,
+      'ultimoPagoId': pagoId,
     });
     for (final m in muebles) {
       batch.set(pedidoRef.collection('muebles').doc(), _datosMueble(m));
@@ -167,8 +198,9 @@ class ServicioPedidos {
     DateTime? ahora,
   }) {
     if (muebles.isEmpty) return null;
-    final cambios = _cambiosDeEstado(
-        pedido, [for (final m in muebles) m.estado], ahora ?? DateTime.now());
+    final cambios = _cambiosDeEstado(pedido, [
+      for (final m in muebles) m.estado,
+    ], ahora ?? DateTime.now());
     if (cambios == null) return null;
     return _db.collection('pedidos').doc(pedido.id).update(cambios);
   }
@@ -295,8 +327,10 @@ class ServicioPedidos {
       'usuarioId': _usuarioId,
       'fecha': FieldValue.serverTimestamp(),
     });
-    batch.update(pedidoRef.collection('muebles').doc(mueble.id),
-        {'precio': redondear2(nuevo), 'ultimoCambioId': cambioRef.id});
+    batch.update(pedidoRef.collection('muebles').doc(mueble.id), {
+      'precio': redondear2(nuevo),
+      'ultimoCambioId': cambioRef.id,
+    });
     return batch.commit();
   }
 
