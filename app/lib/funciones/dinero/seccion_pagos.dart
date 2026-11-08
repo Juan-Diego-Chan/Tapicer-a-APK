@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../dominio/dinero.dart';
+import '../../dominio/inventario.dart' show redondear2;
 import '../../dominio/pedidos.dart';
 import '../../nucleo/formatos.dart';
 import '../inventario/pantalla_inventario.dart' show esDueno;
@@ -63,7 +64,7 @@ class SeccionPagos extends ConsumerWidget {
         ]),
         // Solo el dueño puede leer todos los pagos y las cajas.
         if (dueno)
-          _PagosDueno(pedidoId: pedido.id)
+          _PagosDueno(pedido: pedido)
         else
           _MisPagos(pedidoId: pedido.id),
       ],
@@ -123,9 +124,9 @@ class _MisPagos extends ConsumerWidget {
 }
 
 class _PagosDueno extends ConsumerWidget {
-  const _PagosDueno({required this.pedidoId});
+  const _PagosDueno({required this.pedido});
 
-  final String pedidoId;
+  final Pedido pedido;
 
   Future<void> _borrar(BuildContext context, WidgetRef ref, Pago pago,
       bool cobroDeEmpleado) async {
@@ -164,7 +165,7 @@ class _PagosDueno extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final pagos = ref.watch(pagosPedidoProvider(pedidoId)).value ?? const [];
+    final pagos = ref.watch(pagosPedidoProvider(pedido.id)).value ?? const [];
     // Sin las cajas no se sabe si el pago fue de un empleado: no se borra.
     final cajas = ref.watch(cajasProvider).value;
     final usuarios = ref.watch(usuariosProvider).value ?? const [];
@@ -183,7 +184,9 @@ class _PagosDueno extends ConsumerWidget {
           subtitulo: '${quien(p.recibidoPor)} · ${formatearFecha(p.fecha)}',
           // Las reglas dependen de si esa caja existe, no del rol.
           conBorrar: true,
-          alBorrar: cajas == null
+          // Borrarlo no puede dejar lo pagado por debajo de 0 (las reglas lo
+          // rechazan, p. ej. tras una devolución).
+          alBorrar: cajas == null || redondear2(pedido.pagado - p.monto) < 0
               ? null
               : () =>
                   _borrar(context, ref, p, cajas.containsKey(p.recibidoPor)),

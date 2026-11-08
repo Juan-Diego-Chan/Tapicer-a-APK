@@ -20,6 +20,13 @@ String _nombreDe(List<Usuario> usuarios, String uid) {
   return 'Usuario desconocido';
 }
 
+String _nombreEnLista(List<Usuario> usuarios, String uid) {
+  for (final u in usuarios) {
+    if (u.uid == uid) return u.activo ? u.nombre : '${u.nombre} (inactivo)';
+  }
+  return 'Usuario desconocido';
+}
+
 /// Lo ve cada quien según su rol. El árbol del empleado nunca lee las cajas
 /// ni las entregas de todos: esas lecturas son solo del dueño.
 class PantallaDinero extends ConsumerWidget {
@@ -55,7 +62,7 @@ class PantallaEntregasEmpleado extends ConsumerWidget {
           Text('En sus manos: ${formatearDinero(enMano)}',
               style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 16),
-          _ListaEntregas(entregas: entregas),
+          _ListaEntregas(titulo: 'Entregas', entregas: entregas),
         ],
       ),
     );
@@ -63,8 +70,9 @@ class PantallaEntregasEmpleado extends ConsumerWidget {
 }
 
 class _ListaEntregas extends StatelessWidget {
-  const _ListaEntregas({required this.entregas});
+  const _ListaEntregas({required this.titulo, required this.entregas});
 
+  final String titulo;
   final List<EntregaDinero> entregas;
 
   @override
@@ -73,7 +81,7 @@ class _ListaEntregas extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Tus entregas', style: tema.textTheme.titleMedium),
+        Text(titulo, style: tema.textTheme.titleMedium),
         if (entregas.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
@@ -127,7 +135,7 @@ class _VistaEmpleado extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 16),
-        _ListaEntregas(entregas: entregas),
+        _ListaEntregas(titulo: 'Tus entregas', entregas: entregas),
       ],
     );
   }
@@ -211,8 +219,16 @@ class _DialogoEntregaState extends ConsumerState<_DialogoEntrega> {
   }
 }
 
-class _VistaDueno extends ConsumerWidget {
+class _VistaDueno extends ConsumerStatefulWidget {
   const _VistaDueno();
+
+  @override
+  ConsumerState<_VistaDueno> createState() => _VistaDuenoState();
+}
+
+class _VistaDuenoState extends ConsumerState<_VistaDueno> {
+  /// Entregas ya tocadas: evita mandar el lote dos veces con un doble toque.
+  final _tocadas = <String>{};
 
   void _ejecutar(BuildContext context, Future<void> Function() accion) {
     final messenger = ScaffoldMessenger.of(context);
@@ -223,8 +239,13 @@ class _VistaDueno extends ConsumerWidget {
     }
   }
 
-  Future<void> _rechazar(BuildContext context, WidgetRef ref,
-      EntregaDinero e, String nombre) async {
+  void _confirmar(EntregaDinero e) {
+    if (!_tocadas.add(e.id)) return;
+    setState(() {});
+    _ejecutar(context, () => ref.read(servicioDineroProvider).confirmarEntrega(e));
+  }
+
+  Future<void> _rechazar(EntregaDinero e, String nombre) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -244,18 +265,28 @@ class _VistaDueno extends ConsumerWidget {
         ],
       ),
     );
-    if (ok != true || !context.mounted) return;
+    if (ok != true || !mounted || !_tocadas.add(e.id)) return;
+    setState(() {});
     _ejecutar(context, () => ref.read(servicioDineroProvider).rechazarEntrega(e));
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final tema = Theme.of(context);
     final usuarios = ref.watch(usuariosProvider).value ?? const [];
     final pendientes = ref.watch(entregasPendientesProvider).value ?? const [];
     final cajas = ref.watch(cajasProvider).value ?? const {};
-    final empleados =
-        usuarios.where((u) => u.rol == Rol.empleado && u.activo).toList();
+    // Todo empleado activo, más cualquiera con dinero en su caja aunque ya
+    // esté inactivo o haya cambiado de rol.
+    final uids = <String>[
+      for (final u in usuarios)
+        if ((u.rol == Rol.empleado && u.activo) ||
+            redondear2(cajas[u.uid] ?? 0) != 0)
+          u.uid,
+      for (final c in cajas.entries)
+        if (redondear2(c.value) != 0 && !usuarios.any((u) => u.uid == c.key))
+          c.key,
+    ];
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -274,25 +305,26 @@ class _VistaDueno extends ConsumerWidget {
             subtitle: Text(formatearFecha(e.fecha)),
             trailing: Wrap(spacing: 4, children: [
               TextButton(
-                onPressed: () => _rechazar(
-                    context, ref, e, _nombreDe(usuarios, e.empleadoId)),
+                onPressed: _tocadas.contains(e.id)
+                    ? null
+                    : () => _rechazar(e, _nombreDe(usuarios, e.empleadoId)),
                 child: const Text('Rechazar'),
               ),
               FilledButton(
-                onPressed: () => _ejecutar(context,
-                    () => ref.read(servicioDineroProvider).confirmarEntrega(e)),
+                onPressed:
+                    _tocadas.contains(e.id) ? null : () => _confirmar(e),
                 child: const Text('Confirmar'),
               ),
             ]),
           ),
         const Divider(height: 32),
         Text('En manos de empleados', style: tema.textTheme.titleMedium),
-        for (final u in empleados)
+        for (final uid in uids)
           ListTile(
             contentPadding: EdgeInsets.zero,
-            title: Text(u.nombre),
-            trailing: Text(formatearDinero(cajas[u.uid] ?? 0)),
-            onTap: () => context.push('/dinero/${u.uid}'),
+            title: Text(_nombreEnLista(usuarios, uid)),
+            trailing: Text(formatearDinero(cajas[uid] ?? 0)),
+            onTap: () => context.push('/dinero/$uid'),
           ),
       ],
     );

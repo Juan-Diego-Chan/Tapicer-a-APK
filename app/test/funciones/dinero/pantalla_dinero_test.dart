@@ -33,6 +33,7 @@ Future<FakeFirebaseFirestore> _montar(
   double enMano = 0,
   Map<String, double> cajas = const {},
   bool lanzaDueno = false,
+  List<Usuario>? usuarios,
 }) async {
   t.view.physicalSize = const Size(800, 2000);
   t.view.devicePixelRatio = 1;
@@ -52,11 +53,12 @@ Future<FakeFirebaseFirestore> _montar(
         estadoSesionProvider
             .overrideWith((ref) => Stream.value(SesionActiva(sesion))),
         usuariosProvider.overrideWith(
-          (ref) => Stream.value([
-            _usuario('d1', 'Dueña', Rol.dueno),
-            _usuario('u1', 'Ana', Rol.empleado),
-            _usuario('u2', 'Beto', Rol.empleado),
-          ]),
+          (ref) => Stream.value(usuarios ??
+              [
+                _usuario('d1', 'Dueña', Rol.dueno),
+                _usuario('u1', 'Ana', Rol.empleado),
+                _usuario('u2', 'Beto', Rol.empleado),
+              ]),
         ),
         enManoProvider.overrideWith((ref, uid) => Stream.value(enMano)),
         entregasDeProvider.overrideWith((ref, uid) => Stream.value(
@@ -194,6 +196,65 @@ void main() {
       expect(find.text('\$500.00'), findsOneWidget);
       expect(find.text('Beto'), findsOneWidget);
       expect(find.text('\$0.00'), findsOneWidget);
+    });
+
+    testWidgets('un inactivo con caja sale como inactivo; sin caja no sale',
+        (t) async {
+      await _montar(t, sesion: dueno, cajas: {
+        'u3': 500,
+        'u9': 40,
+        'u1': 0.001,
+      }, usuarios: [
+        dueno,
+        ana,
+        Usuario(
+            uid: 'u3',
+            nombre: 'Carla',
+            email: 'c@x.com',
+            rol: Rol.empleado,
+            activo: false),
+        Usuario(
+            uid: 'u4',
+            nombre: 'Dario',
+            email: 'd@x.com',
+            rol: Rol.empleado,
+            activo: false),
+      ]);
+      expect(find.text('Carla (inactivo)'), findsOneWidget);
+      expect(find.text('\$500.00'), findsOneWidget);
+      expect(find.text('Dario (inactivo)'), findsNothing);
+      expect(find.text('Dario'), findsNothing);
+      expect(find.text('Usuario desconocido'), findsOneWidget);
+      expect(find.text('Ana'), findsOneWidget);
+    });
+
+    testWidgets('no se puede confirmar ni rechazar dos veces', (t) async {
+      final db = await _montar(t,
+          sesion: dueno,
+          entregas: [_entrega('e1', 'u1', 300)],
+          cajas: {'u1': 1000});
+      await t.tap(find.text('Confirmar'));
+      await t.pump();
+      expect(
+          t.widget<FilledButton>(find.widgetWithText(FilledButton, 'Confirmar'))
+              .onPressed,
+          isNull);
+      expect(
+          t.widget<TextButton>(find.widgetWithText(TextButton, 'Rechazar'))
+              .onPressed,
+          isNull);
+      await t.pumpAndSettle();
+      expect((await db.collection('cajas').doc('u1').get()).data()!['enMano'],
+          -300);
+    });
+
+    testWidgets('la vista del dueño de un empleado dice Entregas', (t) async {
+      await _montar(t,
+          sesion: dueno,
+          pantalla: const PantallaEntregasEmpleado(uid: 'u1'),
+          entregas: [_entrega('e1', 'u1', 300)]);
+      expect(find.text('Entregas'), findsOneWidget);
+      expect(find.text('Tus entregas'), findsNothing);
     });
   });
 }

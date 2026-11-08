@@ -224,6 +224,26 @@ void main() {
     expect(pagos.docs.single.data()['forma'], 'efectivo');
   });
 
+  testWidgets('no ofrece borrar un pago si dejaría pagado por debajo de 0', (
+    t,
+  ) async {
+    await _montar(
+      t,
+      Rol.dueno,
+      _pedido(pagado: 300),
+      pagos: [_pago('a', 500, 'u2'), _pago('b', -200, 'u1')],
+    );
+    final botones = t
+        .widgetList<IconButton>(
+          find.widgetWithIcon(IconButton, Icons.delete_outline),
+        )
+        .toList();
+    expect(botones, hasLength(2));
+    expect(botones[0].onPressed, isNull);
+    expect(botones[1].onPressed, isNotNull);
+    expect(find.byTooltip('Borrar pago'), findsNWidgets(2));
+  });
+
   testWidgets('sin cajas cargadas el botón de borrar está deshabilitado', (
     t,
   ) async {
