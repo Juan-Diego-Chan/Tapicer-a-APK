@@ -225,7 +225,7 @@ service cloud.firestore {
     function pedidoValido(d) {
       return d.keys().hasOnly(['folio', 'clienteId', 'cliente', 'entrega', 'envio', 'comentarios',
           'fechaIngreso', 'fechaEstimada', 'fechaTerminado', 'fechaEntregado', 'estado', 'creadoPor',
-          'ultimoCambioId'])
+          'ultimoCambioId', 'pagado', 'ultimoPagoId'])
         && textoEntre(d.folio, 1, 20)
         && d.clienteId is string
         && clienteValido(d.cliente)
@@ -238,7 +238,9 @@ service cloud.firestore {
         && nuloOFecha(d.fechaEntregado)
         && estadoValido(d.estado)
         && d.creadoPor is string
-        && nuloOTexto(d.ultimoCambioId);
+        && nuloOTexto(d.ultimoCambioId)
+        && (!('pagado' in d) || dinero(d.pagado))
+        && nuloOTexto(d.get('ultimoPagoId', null));
     }
 
     function muebleValido(d) {
@@ -336,6 +338,133 @@ service cloud.firestore {
         && getAfter(ruta).data[campo] == request.resource.data.nuevo;
     }
 
+    // ---- Dinero: pagos, saldo del pedido y cajas ----
+    // Solo para deltas de contadores (increment acumula residuos de punto flotante).
+    function igualDinero(a, b) { return math.abs(a - b) < 0.001; }
+    function rutaPago(id) { return /databases/$(database)/documents/pagos/$(id); }
+    function rutaCaja(uid) { return /databases/$(database)/documents/cajas/$(uid); }
+    function pagadoAntes(ruta) { return exists(ruta) ? get(ruta).data.get('pagado', 0) : 0; }
+    function enManoAntes(ruta) { return exists(ruta) ? get(ruta).data.enMano : 0; }
+
+    function pagoValido(d) {
+      return d.keys().hasOnly(['pedidoId', 'monto', 'forma', 'recibidoPor', 'fecha'])
+        && d.pedidoId is string
+        && d.monto is number && d.monto == d.monto && d.monto != 0
+        && d.monto > -1000000000 && d.monto < 1000000000
+        && d.forma in ['efectivo', 'transferencia']
+        && d.recibidoPor == request.auth.uid
+        && d.fecha == request.time;
+    }
+
+    // Lado del pedido: el pago {id} se refleja en pagado (crear: +monto; borrar: -monto).
+    // En create, pedidoId = request.resource.data.pedidoId; en delete, resource.data.pedidoId.
+    function pagoEnPedido(id, pedidoId, monto) {
+      let ruta = /databases/$(database)/documents/pedidos/$(pedidoId);
+      return getAfter(ruta).data.ultimoPagoId == id
+        && igualDinero(getAfter(ruta).data.pagado - pagadoAntes(ruta), monto);
+    }
+    // Lado de la caja: lo mismo con enMano.
+    function pagoEnCaja(id, uid, monto) {
+      return getAfter(rutaCaja(uid)).data.ultimoPagoId == id
+        && igualDinero(getAfter(rutaCaja(uid)).data.enMano - enManoAntes(rutaCaja(uid)), monto);
+    }
+
+    // Lado del pago, visto desde el pedido {p}. delta = pagado nuevo - pagado anterior.
+    function pagadoRegistrado(p) {
+      let d = request.resource.data;
+      let id = d.get('ultimoPagoId', null);
+      let delta = d.get('pagado', 0) - resource.data.get('pagado', 0);
+      return (d.get('pagado', 0) == resource.data.get('pagado', 0)
+          && id == resource.data.get('ultimoPagoId', null))
+        // Pago nuevo, creado en este mismo lote (no se reutiliza uno viejo).
+        || (id is string && id != resource.data.get('ultimoPagoId', null)
+          && !exists(rutaPago(id))
+          && getAfter(rutaPago(id)).data.pedidoId == p
+          && igualDinero(delta, getAfter(rutaPago(id)).data.monto))
+        // El dueño borra un pago en este mismo lote.
+        || (esDueno() && id is string
+          && exists(rutaPago(id)) && !existsAfter(rutaPago(id))
+          && get(rutaPago(id)).data.pedidoId == p
+          && igualDinero(delta, -get(rutaPago(id)).data.monto));
+    }
+
+    // Pedido nuevo: sin pagado, o con el anticipo creado en el mismo lote.
+    function pagadoInicial(p) {
+      let d = request.resource.data;
+      let id = d.get('ultimoPagoId', null);
+      return (d.get('pagado', 0) == 0 && id == null)
+        || (id is string
+          && !exists(rutaPago(id))
+          && getAfter(rutaPago(id)).data.pedidoId == p
+          && getAfter(rutaPago(id)).data.monto > 0
+          && igualDinero(d.pagado, getAfter(rutaPago(id)).data.monto));
+    }
+
+    function cajaValida(d) {
+      return d.keys().hasOnly(['enMano', 'ultimoPagoId', 'ultimaEntregaId'])
+        && d.enMano is number
+        && d.enMano == d.enMano
+        && d.enMano > -1000000000000000 && d.enMano < 1000000000000000;
+    }
+
+    function enManoPrevio() {
+      return resource == null ? 0 : resource.data.enMano;
+    }
+
+    function campoCajaPrevio(campo) {
+      return resource == null ? null : resource.data.get(campo, null);
+    }
+
+    // Cobro del empleado: su propia caja sube lo que dice el pago nuevo.
+    function cobroEnCaja(uid) {
+      let d = request.resource.data;
+      let id = d.get('ultimoPagoId', null);
+      return esEmpleado() && request.auth.uid == uid
+        && id is string && id != campoCajaPrevio('ultimoPagoId')
+        && d.get('ultimaEntregaId', null) == campoCajaPrevio('ultimaEntregaId')
+        && !exists(rutaPago(id))
+        && getAfter(rutaPago(id)).data.recibidoPor == uid
+        && igualDinero(d.enMano - enManoPrevio(), getAfter(rutaPago(id)).data.monto);
+    }
+
+    // El dueño borra un pago: la caja (que ya existía) baja ese monto.
+    function pagoBorradoEnCaja(uid) {
+      let d = request.resource.data;
+      let id = d.get('ultimoPagoId', null);
+      return esDueno() && resource != null
+        && id is string
+        && exists(rutaPago(id)) && !existsAfter(rutaPago(id))
+        && get(rutaPago(id)).data.recibidoPor == uid
+        && igualDinero(d.enMano - enManoPrevio(), -get(rutaPago(id)).data.monto)
+        && d.get('ultimaEntregaId', null) == campoCajaPrevio('ultimaEntregaId');
+    }
+
+    // Entrega de efectivo al dueño confirmada. La define la Tarea 4.
+    function entregaConfirmada(uid) {
+      return false;
+    }
+
+    match /pagos/{id} {
+      allow read: if esDueno() || (activo() && resource.data.recibidoPor == request.auth.uid);
+      allow create: if pagoValido(request.resource.data)
+        && pagoEnPedido(id, request.resource.data.pedidoId, request.resource.data.monto)
+        && (esDueno()
+          || (esEmpleado() && request.resource.data.monto > 0
+            && pagoEnCaja(id, request.auth.uid, request.resource.data.monto)));
+      allow update: if false;
+      allow delete: if esDueno()
+        && pagoEnPedido(id, resource.data.pedidoId, -resource.data.monto)
+        && (!exists(rutaCaja(resource.data.recibidoPor))
+          || pagoEnCaja(id, resource.data.recibidoPor, -resource.data.monto));
+    }
+
+    match /cajas/{uid} {
+      allow read: if esDueno() || (activo() && request.auth.uid == uid);
+      allow create, update: if cajaValida(request.resource.data)
+        && (cobroEnCaja(uid) || pagoBorradoEnCaja(uid) || entregaConfirmada(uid));
+      allow delete: if false;
+    }
+
     match /clientes/{id} {
       allow read: if activo();
       allow create, update: if activo() && clienteValido(request.resource.data);
@@ -349,13 +478,17 @@ service cloud.firestore {
         && request.resource.data.creadoPor == request.auth.uid
         && request.resource.data.ultimoCambioId == null
         && request.resource.data.fechaTerminado == null
-        && request.resource.data.fechaEntregado == null;
+        && request.resource.data.fechaEntregado == null
+        && pagadoInicial(p);
       allow update: if pedidoValido(request.resource.data)
         && envioRegistrado(p)
+        && pagadoRegistrado(p)
         && (esDueno()
           || (esEmpleado() && soloCambia(['entrega', 'envio', 'comentarios', 'fechaEstimada',
-              'fechaTerminado', 'fechaEntregado', 'estado', 'ultimoCambioId'])));
-      allow delete: if esDueno();
+              'fechaTerminado', 'fechaEntregado', 'estado', 'ultimoCambioId',
+              'pagado', 'ultimoPagoId'])));
+      // Con saldo cobrado no se borra (primero se devuelve o se borran los pagos).
+      allow delete: if esDueno() && resource.data.get('pagado', 0) == 0;
 
       match /muebles/{m} {
         allow read: if activo();
