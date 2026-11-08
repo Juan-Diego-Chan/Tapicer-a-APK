@@ -9,6 +9,7 @@ import '../funciones/auth/pantalla_inicio_sesion.dart';
 import '../funciones/auth/providers.dart';
 import '../funciones/auth/servicio_sesion.dart';
 import '../funciones/compras/pantalla_lista_compras.dart';
+import '../funciones/dinero/pantalla_dinero.dart';
 import '../funciones/inicio/pantalla_inicio.dart';
 import '../funciones/inventario/pantalla_inventario.dart';
 import '../funciones/inventario/pantalla_material.dart';
@@ -35,6 +36,7 @@ const _rutasConPantalla = {
   '/pedidos',
   '/fabricacion',
   '/reparacion',
+  '/dinero',
 };
 
 /// Lógica pura de guardia. Devuelve la ruta destino o null si no hay que
@@ -128,6 +130,18 @@ GoRouter crearRouter(Ref ref) {
       GoRoute(
         path: '/reparacion',
         builder: (_, _) => const PantallaTrabajo(tipo: TipoTrabajo.reparacion),
+      ),
+      GoRoute(
+        path: '/dinero',
+        builder: (_, _) => const PantallaDinero(),
+        routes: [
+          // Solo el dueño: la pantalla se queda vacía para cualquier otro rol.
+          GoRoute(
+            path: ':uid',
+            builder: (_, s) =>
+                PantallaEntregasEmpleado(uid: s.pathParameters['uid']!),
+          ),
+        ],
       ),
       for (final e in entradasMenu.where(
         (e) => !_rutasConPantalla.contains(e.ruta),
