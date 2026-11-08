@@ -156,8 +156,19 @@ describe('pedido + muebles en un lote', () => {
 
   it("empleado agrega un mueble 'recibido' a un pedido existente", async () => {
     const db = como(env, 'emp1');
-    await assertSucceeds(setDoc(doc(db, 'pedidos', 'p1', 'muebles', 'nuevo1'), mueble()));
-    await assertFails(setDoc(doc(db, 'pedidos', 'p1', 'muebles', 'nuevo2'), mueble({ estado: 'entregado' })));
+    const alta = (id: string, m: Record<string, unknown>) => {
+      const c = doc(collection(db, 'pedidos', 'p1', 'cambios_precio'));
+      const b = writeBatch(db);
+      b.set(c, cambio({ campo: 'alta', muebleId: id, anterior: 0, nuevo: 650 }));
+      b.set(doc(db, 'pedidos', 'p1', 'muebles', id), mueble({ ultimoCambioId: c.id, ...m }));
+      return b.commit();
+    };
+    await assertSucceeds(alta('nuevo1', {}));
+    await assertFails(alta('nuevo2', { estado: 'entregado' }));
+  });
+
+  it('falla si agrega un mueble a un pedido existente sin registro', async () => {
+    await assertFails(setDoc(doc(como(env, 'emp1'), 'pedidos', 'p1', 'muebles', 'nuevo1'), mueble()));
   });
 
   it('falla si el mueble se crea en un pedido que no existe', async () => {
@@ -266,6 +277,83 @@ describe('cambio de precio', () => {
 
   it('cambiar envio sin registro falla', async () => {
     await assertFails(updateDoc(doc(como(env, 'emp1'), 'pedidos', 'p1'), { envio: 0 }));
+  });
+});
+
+describe('altas y cancelaciones', () => {
+  function loteAlta(db: Firestore, { nuevo = 600, precio = 600 }: { nuevo?: number; precio?: number } = {}) {
+    const c = doc(collection(db, 'pedidos', 'p1', 'cambios_precio'));
+    const b = writeBatch(db);
+    b.set(c, cambio({ campo: 'alta', muebleId: 'nuevo1', anterior: 0, nuevo }));
+    b.set(doc(db, 'pedidos', 'p1', 'muebles', 'nuevo1'), mueble({ precio, ultimoCambioId: c.id }));
+    return b;
+  }
+
+  function loteCancelacion(db: Firestore, uid: string, { anterior = 650 }: { anterior?: number } = {}) {
+    const c = doc(collection(db, 'pedidos', 'p1', 'cambios_precio'));
+    const b = writeBatch(db);
+    b.set(c, cambio({ campo: 'cancelacion', anterior, nuevo: 0, motivo: 'Ya no lo quiere', usuarioId: uid }));
+    b.update(doc(db, 'pedidos', 'p1', 'muebles', 'mu1'), { estado: 'cancelado', ultimoCambioId: c.id });
+    return b;
+  }
+
+  it('empleado agrega un mueble de $600 con su registro alta', async () => {
+    await assertSucceeds(loteAlta(como(env, 'emp1')).commit());
+  });
+
+  it('agregar el mueble de $600 sin registro falla', async () => {
+    await assertFails(
+      setDoc(doc(como(env, 'emp1'), 'pedidos', 'p1', 'muebles', 'nuevo1'), mueble({ precio: 600 })),
+    );
+  });
+
+  it('un registro alta de 500 para un mueble de $600 falla', async () => {
+    await assertFails(loteAlta(como(env, 'emp1'), { nuevo: 500 }).commit());
+  });
+
+  it('un registro alta suelto, sin crear el mueble, falla', async () => {
+    const db = como(env, 'emp1');
+    await assertFails(
+      setDoc(
+        doc(db, 'pedidos', 'p1', 'cambios_precio', 'suelto'),
+        cambio({ campo: 'alta', muebleId: 'nuevo1', anterior: 0, nuevo: 600 }),
+      ),
+    );
+  });
+
+  it('empleado cancela un mueble de $650 con su registro (650 → 0)', async () => {
+    await assertSucceeds(loteCancelacion(como(env, 'emp1'), 'emp1').commit());
+  });
+
+  it('cancelar sin registro falla', async () => {
+    await assertFails(
+      updateDoc(doc(como(env, 'emp1'), 'pedidos', 'p1', 'muebles', 'mu1'), { estado: 'cancelado' }),
+    );
+  });
+
+  it('un registro cancelacion con anterior 600 para un mueble de $650 falla', async () => {
+    await assertFails(loteCancelacion(como(env, 'emp1'), 'emp1', { anterior: 600 }).commit());
+  });
+
+  it("un mueble cancelado no vuelve a 'recibido', ni con registro", async () => {
+    await sembrar('pedidos/p1/muebles', 'mu1', mueble({ estado: 'cancelado' }));
+    for (const uid of ['emp1', 'dueno1']) {
+      const db = como(env, uid);
+      const mu = doc(db, 'pedidos', 'p1', 'muebles', 'mu1');
+      await assertFails(updateDoc(mu, { estado: 'recibido' }));
+      const c = doc(collection(db, 'pedidos', 'p1', 'cambios_precio'));
+      const b = writeBatch(db);
+      b.set(c, cambio({ campo: 'alta', muebleId: 'mu1', anterior: 0, nuevo: 650, usuarioId: uid }));
+      b.update(mu, { estado: 'recibido', ultimoCambioId: c.id });
+      await assertFails(b.commit());
+    }
+  });
+
+  it("el dueño no borra un mueble 'recibido'; uno 'cancelado' sí", async () => {
+    const db = como(env, 'dueno1');
+    await assertFails(deleteDoc(doc(db, 'pedidos', 'p1', 'muebles', 'mu1')));
+    await sembrar('pedidos/p1/muebles', 'mu2', mueble({ estado: 'cancelado' }));
+    await assertSucceeds(deleteDoc(doc(db, 'pedidos', 'p1', 'muebles', 'mu2')));
   });
 });
 

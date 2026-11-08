@@ -255,11 +255,14 @@ service cloud.firestore {
 
     function cambioValido(d) {
       return d.keys().hasOnly(['campo', 'muebleId', 'anterior', 'nuevo', 'motivo', 'usuarioId', 'fecha'])
-        && ((d.campo == 'precio' && d.muebleId is string)
+        && ((d.campo in ['precio', 'alta', 'cancelacion'] && d.muebleId is string)
           || (d.campo == 'envio' && d.muebleId == null))
         && dinero(d.anterior)
         && dinero(d.nuevo)
-        && d.anterior != d.nuevo
+        // Alta: de 0 al precio. Cancelación: del precio a 0 (ambas pueden ser 0 → 0).
+        && (d.campo != 'alta' || d.anterior == 0)
+        && (d.campo != 'cancelacion' || d.nuevo == 0)
+        && (d.anterior != d.nuevo || d.campo in ['alta', 'cancelacion'])
         && (d.motivo == null || textoHasta(d.motivo, 200))
         && d.usuarioId == request.auth.uid
         && d.fecha == request.time;
@@ -298,6 +301,35 @@ service cloud.firestore {
         || (cambioRegistrado(p, 'precio') && registroDe(p).muebleId == m);
     }
 
+    // El registro se crea en este mismo lote (no se reutiliza uno viejo).
+    function registroNuevo(p) {
+      return !exists(/databases/$(database)/documents/pedidos/$(p)/cambios_precio/$(request.resource.data.ultimoCambioId));
+    }
+
+    // Mueble agregado a un pedido que ya existía: su registro 'alta' (0 → precio).
+    function altaRegistrada(p, m) {
+      return registroNuevo(p) && registroDe(p).campo == 'alta' && registroDe(p).muebleId == m
+        && registroDe(p).nuevo == request.resource.data.precio
+        && registroDe(p).usuarioId == request.auth.uid;
+    }
+
+    // Mueble cancelado: su registro 'cancelacion' (precio → 0).
+    function cancelacionRegistrada(p, m) {
+      return request.resource.data.ultimoCambioId != resource.data.get('ultimoCambioId', null)
+        && registroNuevo(p) && registroDe(p).campo == 'cancelacion' && registroDe(p).muebleId == m
+        && registroDe(p).anterior == resource.data.precio
+        && registroDe(p).usuarioId == request.auth.uid;
+    }
+
+    // Cancelar exige registro; un mueble cancelado ya no cambia de estado.
+    function estadoRegistrado(p, m) {
+      let antes = resource.data.estado;
+      let despues = request.resource.data.estado;
+      return despues == antes
+        || (antes != 'cancelado' && despues != 'cancelado')
+        || (antes != 'cancelado' && despues == 'cancelado' && cancelacionRegistrada(p, m));
+    }
+
     function cambioReal(ruta, campo, c) {
       return getAfter(ruta).data.ultimoCambioId == c
         && get(ruta).data[campo] == request.resource.data.anterior
@@ -329,14 +361,20 @@ service cloud.firestore {
         allow read: if activo();
         allow create: if activo()
           && muebleValido(request.resource.data)
-          && request.resource.data.ultimoCambioId == null
           && request.resource.data.estado == 'recibido'
-          && existsAfter(/databases/$(database)/documents/pedidos/$(p));
+          && existsAfter(/databases/$(database)/documents/pedidos/$(p))
+          // exists() mira el estado antes del lote: un mueble creado junto con su
+          // pedido no lleva registro; uno agregado después, sí (alta).
+          && ((!exists(/databases/$(database)/documents/pedidos/$(p))
+              && request.resource.data.ultimoCambioId == null)
+            || (exists(/databases/$(database)/documents/pedidos/$(p)) && altaRegistrada(p, m)));
         allow update: if muebleValido(request.resource.data)
           && precioRegistrado(p, m)
+          && estadoRegistrado(p, m)
           && (esDueno()
             || (esEmpleado() && soloCambia(['precio', 'comentarios', 'estado', 'ultimoCambioId'])));
-        allow delete: if esDueno();
+        // Solo se borra lo cancelado (la cancelación ya quedó en el historial).
+        allow delete: if esDueno() && resource.data.estado == 'cancelado';
 
         // Material usado. Inmutable; el dueño la borra junto con un ajuste.
         match /materiales/{l} {
@@ -371,7 +409,18 @@ service cloud.firestore {
           && ((request.resource.data.campo == 'envio'
               && cambioReal(/databases/$(database)/documents/pedidos/$(p), 'envio', c))
             || (request.resource.data.campo == 'precio'
-              && cambioReal(/databases/$(database)/documents/pedidos/$(p)/muebles/$(request.resource.data.muebleId), 'precio', c)));
+              && cambioReal(/databases/$(database)/documents/pedidos/$(p)/muebles/$(request.resource.data.muebleId), 'precio', c))
+            // Alta: el mueble se crea en este lote, apuntando al registro, con ese precio.
+            || (request.resource.data.campo == 'alta'
+              && !exists(/databases/$(database)/documents/pedidos/$(p)/muebles/$(request.resource.data.muebleId))
+              && getAfter(/databases/$(database)/documents/pedidos/$(p)/muebles/$(request.resource.data.muebleId)).data.ultimoCambioId == c
+              && getAfter(/databases/$(database)/documents/pedidos/$(p)/muebles/$(request.resource.data.muebleId)).data.precio == request.resource.data.nuevo)
+            // Cancelación: el mueble pasa a cancelado en este lote, desde su precio.
+            || (request.resource.data.campo == 'cancelacion'
+              && get(/databases/$(database)/documents/pedidos/$(p)/muebles/$(request.resource.data.muebleId)).data.estado != 'cancelado'
+              && getAfter(/databases/$(database)/documents/pedidos/$(p)/muebles/$(request.resource.data.muebleId)).data.estado == 'cancelado'
+              && get(/databases/$(database)/documents/pedidos/$(p)/muebles/$(request.resource.data.muebleId)).data.precio == request.resource.data.anterior
+              && getAfter(/databases/$(database)/documents/pedidos/$(p)/muebles/$(request.resource.data.muebleId)).data.ultimoCambioId == c));
         allow update, delete: if false;
       }
     }
