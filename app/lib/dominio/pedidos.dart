@@ -107,6 +107,7 @@ class Pedido {
   final DateTime? fechaEntregado;
   final EstadoMueble estado;
   final String creadoPor;
+  final double pagado;
 
   const Pedido({
     required this.id,
@@ -121,6 +122,7 @@ class Pedido {
     required this.fechaEntregado,
     required this.estado,
     required this.creadoPor,
+    this.pagado = 0,
   });
 
   /// [aFecha] convierte el valor crudo (Timestamp) a [DateTime]; devuelve
@@ -144,6 +146,7 @@ class Pedido {
       fechaEntregado: aFecha(m['fechaEntregado']),
       estado: EstadoMueble.desdeTexto(leerTexto(m, 'estado')),
       creadoPor: leerTexto(m, 'creadoPor'),
+      pagado: m['pagado'] == null ? 0 : redondear2(leerNumero(m, 'pagado')),
     );
   }
 }
@@ -243,7 +246,9 @@ class DiaTrabajado {
 
 enum CampoPrecio {
   precio,
-  envio;
+  envio,
+  alta,
+  cancelacion;
 
   static CampoPrecio desdeTexto(String texto) {
     for (final c in values) {

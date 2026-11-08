@@ -150,4 +150,27 @@ void main() {
         'c', {'nombre': 'A', 'telefono': '1', 'direccion': ''});
     expect(c.aMapa(), {'nombre': 'A', 'telefono': '1', 'direccion': ''});
   });
+
+  test('pagado vale 0 si falta y se lee si existe', () {
+    expect(Pedido.desdeMapa('p', _mapaPedido(), _aFecha).pagado, 0);
+    expect(
+        Pedido.desdeMapa('p', {..._mapaPedido(), 'pagado': 500}, _aFecha)
+            .pagado,
+        500);
+  });
+
+  test('cambio de precio por cancelación', () {
+    final c = CambioPrecio.desdeMapa(
+        'c',
+        {
+          'campo': 'cancelacion',
+          'anterior': 1,
+          'nuevo': 0,
+          'usuarioId': 'u',
+          'fecha': DateTime(2026),
+        },
+        _aFecha);
+    expect(c.campo, CampoPrecio.cancelacion);
+    expect(CampoPrecio.desdeTexto('alta'), CampoPrecio.alta);
+  });
 }
