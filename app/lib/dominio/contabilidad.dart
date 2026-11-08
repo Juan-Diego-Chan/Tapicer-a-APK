@@ -1,6 +1,8 @@
+import 'costos_pedido.dart';
 import 'dinero.dart';
 import 'inventario.dart';
 import 'lectura.dart';
+import 'pedidos.dart';
 
 enum TipoPeriodo { semana, mes, rango }
 
@@ -202,3 +204,163 @@ ResumenGastos resumirGastos({
   }
   return ResumenGastos(compras: redondear2(c), sueldos: redondear2(s));
 }
+
+/// Costos unitarios conocidos; cada función devuelve `null` si el costo se
+/// desconoce (el dueño cuesta 0 por día).
+class CostosConocidos {
+  final double? Function(String materialId) costoMaterial;
+  final double? Function(String rolloId) costoRollo;
+  final double? Function(String usuarioId) costoDiaDe;
+
+  const CostosConocidos({
+    required this.costoMaterial,
+    required this.costoRollo,
+    required this.costoDiaDe,
+  });
+}
+
+class GananciaMueble {
+  final Pedido pedido;
+  final Mueble mueble;
+  final Costo materiales;
+  final Costo manoObra;
+
+  const GananciaMueble({
+    required this.pedido,
+    required this.mueble,
+    required this.materiales,
+    required this.manoObra,
+  });
+
+  double get ganancia =>
+      redondear2(mueble.precio - materiales.monto - manoObra.monto);
+
+  /// `null` si el precio es 0.
+  double? get margen => mueble.precio == 0 ? null : ganancia / mueble.precio;
+
+  bool get incompleto => materiales.incompleto || manoObra.incompleto;
+}
+
+class GananciaPedido {
+  final Pedido pedido;
+  final double total;
+
+  /// Solo los muebles no cancelados.
+  final List<GananciaMueble> muebles;
+
+  /// Suma de los costos de todos los muebles, cancelados incluidos.
+  final Costo costos;
+
+  const GananciaPedido({
+    required this.pedido,
+    required this.total,
+    required this.muebles,
+    required this.costos,
+  });
+
+  double get ganancia => redondear2(total - costos.monto);
+
+  bool get incompleto => costos.incompleto;
+}
+
+GananciaPedido gananciaPedido({
+  required Pedido pedido,
+  required List<Mueble> muebles,
+  required List<LineaMaterial> Function(String muebleId) lineasDe,
+  required List<DiaTrabajado> Function(String muebleId) diasDe,
+  required CostosConocidos costos,
+}) {
+  var suma = Costo.cero;
+  final vivos = <GananciaMueble>[];
+  for (final m in muebles) {
+    final materiales = costoLineas(
+      lineasDe(m.id),
+      costoMaterial: costos.costoMaterial,
+      costoRollo: costos.costoRollo,
+    );
+    final manoObra = costoManoObra(diasDe(m.id), costoDiaDe: costos.costoDiaDe);
+    suma = suma + materiales + manoObra;
+    if (m.estado != EstadoMueble.cancelado) {
+      vivos.add(GananciaMueble(
+        pedido: pedido,
+        mueble: m,
+        materiales: materiales,
+        manoObra: manoObra,
+      ));
+    }
+  }
+  return GananciaPedido(
+    pedido: pedido,
+    total: totalPedido(vivos.map((g) => g.mueble.precio), pedido.envio),
+    muebles: vivos,
+    costos: suma,
+  );
+}
+
+/// Menor margen primero; margen nulo antes que todos; empate, menor ganancia.
+Map<TipoTrabajo, List<GananciaMueble>> porMenorMargen(
+    Iterable<GananciaMueble> muebles) {
+  final r = {for (final t in TipoTrabajo.values) t: <GananciaMueble>[]};
+  for (final g in muebles) {
+    r[g.mueble.tipoTrabajo]!.add(g);
+  }
+  for (final lista in r.values) {
+    lista.sort((a, b) {
+      final ma = a.margen, mb = b.margen;
+      if (ma == null && mb != null) return -1;
+      if (ma != null && mb == null) return 1;
+      if (ma != null && mb != null) {
+        final c = ma.compareTo(mb);
+        if (c != 0) return c;
+      }
+      return a.ganancia.compareTo(b.ganancia);
+    });
+  }
+  return r;
+}
+
+class DiferenciaMaterial {
+  final Pedido pedido;
+  final Mueble mueble;
+  final Comparacion comparacion;
+
+  const DiferenciaMaterial({
+    required this.pedido,
+    required this.mueble,
+    required this.comparacion,
+  });
+}
+
+/// Comparaciones con más de 10 % sobre lo estimado (incluye materiales
+/// usados que no están en la plantilla).
+List<DiferenciaMaterial> diferenciasMaterial({
+  required Pedido pedido,
+  required List<Mueble> muebles,
+  required List<LineaMaterial> Function(String muebleId) lineasDe,
+  required Plantilla? Function(String? plantillaId) plantillaDe,
+}) {
+  final r = <DiferenciaMaterial>[];
+  for (final m in muebles) {
+    if (m.estado == EstadoMueble.cancelado || m.plantillaId == null) continue;
+    final plantilla = plantillaDe(m.plantillaId);
+    if (plantilla == null) continue;
+    final comparaciones =
+        estimadoVsUsado(plantilla, usadoPorMaterial(lineasDe(m.id)));
+    for (final c in comparaciones) {
+      if (c.usado > c.estimado * 1.10 + 1e-9) {
+        r.add(DiferenciaMaterial(pedido: pedido, mueble: m, comparacion: c));
+      }
+    }
+  }
+  return r;
+}
+
+double saldoPendiente(Pedido pedido, List<Mueble> muebles) => saldoPedido(
+      totalPedido(
+        muebles
+            .where((m) => m.estado != EstadoMueble.cancelado)
+            .map((m) => m.precio),
+        pedido.envio,
+      ),
+      pedido.pagado,
+    );
