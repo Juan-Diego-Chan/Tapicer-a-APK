@@ -239,7 +239,9 @@ service cloud.firestore {
         && estadoValido(d.estado)
         && d.creadoPor is string
         && nuloOTexto(d.ultimoCambioId)
-        && (!('pagado' in d) || dinero(d.pagado))
+        // Tolera residuos de increment (p. ej. 0.3 - 0.1 - 0.2 = -2.78e-17).
+        && (!('pagado' in d) || (d.pagado is number && d.pagado == d.pagado
+          && d.pagado > -0.001 && d.pagado < 1000000000))
         && nuloOTexto(d.get('ultimoPagoId', null));
     }
 
@@ -488,7 +490,7 @@ service cloud.firestore {
               'fechaTerminado', 'fechaEntregado', 'estado', 'ultimoCambioId',
               'pagado', 'ultimoPagoId'])));
       // Con saldo cobrado no se borra (primero se devuelve o se borran los pagos).
-      allow delete: if esDueno() && resource.data.get('pagado', 0) == 0;
+      allow delete: if esDueno() && math.abs(resource.data.get('pagado', 0)) < 0.001;
 
       match /muebles/{m} {
         allow read: if activo();

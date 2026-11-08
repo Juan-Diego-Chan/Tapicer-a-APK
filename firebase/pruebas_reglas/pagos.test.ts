@@ -305,6 +305,33 @@ describe('pedido nuevo con anticipo', () => {
   });
 });
 
+describe('residuos de punto flotante en pagado', () => {
+  it('dueño cobra 0.3 y devuelve -0.1 y -0.2: todo pasa', async () => {
+    const db = como(env, 'due1');
+    await assertSucceeds(loteCobro(db, 'due1', 0.3, { conCaja: false }).b.commit());
+    await assertSucceeds(loteCobro(db, 'due1', -0.1, { conCaja: false }).b.commit());
+    await assertSucceeds(loteCobro(db, 'due1', -0.2, { conCaja: false }).b.commit());
+  });
+
+  it('cobros 0.1 + 0.2, el dueño borra ambos pagos y luego el pedido', async () => {
+    const emp = como(env, 'emp1');
+    const due = como(env, 'due1');
+    const a = loteCobro(emp, 'emp1', 0.1);
+    await assertSucceeds(a.b.commit());
+    const c = loteCobro(emp, 'emp1', 0.2);
+    await assertSucceeds(c.b.commit());
+    await assertSucceeds(loteBorrado(due, a.id, 0.1).commit());
+    await assertSucceeds(loteBorrado(due, c.id, 0.2).commit());
+    await assertSucceeds(deleteDoc(doc(due, 'pedidos', 'pe1')));
+  });
+
+  it('una devolución que deja pagado en -1 falla', async () => {
+    const db = como(env, 'due1');
+    await assertSucceeds(loteCobro(db, 'due1', 0.3, { conCaja: false }).b.commit());
+    await assertFails(loteCobro(db, 'due1', -1.3, { conCaja: false }).b.commit());
+  });
+});
+
 describe('borrado de pedidos', () => {
   it('due1 no borra un pedido con pagado 500; con pagado 0, sí', async () => {
     await sembrar('pedidos', 'pe1', pedido({ pagado: 500, ultimoPagoId: 'pgx' }));
