@@ -19,6 +19,7 @@ import '../funciones/pedidos/pantalla_pedido.dart';
 import '../funciones/pedidos/pantalla_pedidos.dart';
 import '../funciones/plantillas/pantalla_plantillas.dart';
 import '../funciones/trabajo/pantalla_trabajo.dart';
+import '../funciones/usuarios/pantalla_sueldos.dart';
 import '../funciones/usuarios/pantalla_usuarios.dart';
 import 'pantalla_proximamente.dart';
 
@@ -82,7 +83,17 @@ GoRouter crearRouter(Ref ref) {
       GoRoute(path: '/cuenta', builder: (_, _) => const PantallaEstadoCuenta()),
       // Secciones sin pantalla todavía comparten el marcador "Próximamente".
       // Los planes siguientes reemplazan cada una por su pantalla real.
-      GoRoute(path: '/usuarios', builder: (_, _) => const PantallaUsuarios()),
+      GoRoute(
+        path: '/usuarios',
+        builder: (_, _) => const PantallaUsuarios(),
+        routes: [
+          // Solo el dueño: la pantalla se queda vacía para cualquier otro rol.
+          GoRoute(
+            path: ':uid',
+            builder: (_, s) => PantallaSueldos(uid: s.pathParameters['uid']!),
+          ),
+        ],
+      ),
       GoRoute(
         path: '/inventario',
         builder: (_, _) => const PantallaInventario(),
