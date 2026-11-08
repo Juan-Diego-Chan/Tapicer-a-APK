@@ -325,6 +325,38 @@ describe('altas y cancelaciones', () => {
     await assertSucceeds(loteCancelacion(como(env, 'emp1'), 'emp1').commit());
   });
 
+  async function sembrarMuebles(n: number) {
+    for (let i = 2; i <= n; i++) await sembrar('pedidos/p1/muebles', `mu${i}`, mueble());
+  }
+
+  function loteCancelaciones(db: Firestore, desde: number, hasta: number) {
+    const b = writeBatch(db);
+    for (let i = desde; i <= hasta; i++) {
+      const c = doc(collection(db, 'pedidos', 'p1', 'cambios_precio'));
+      b.set(c, cambio({ campo: 'cancelacion', muebleId: `mu${i}`, anterior: 650, nuevo: 0, usuarioId: 'emp1' }));
+      b.update(doc(db, 'pedidos', 'p1', 'muebles', `mu${i}`), { estado: 'cancelado', ultimoCambioId: c.id });
+    }
+    return b;
+  }
+
+  it('un lote de 8 cancelaciones (mueble + registro cada una) se acepta', async () => {
+    await sembrarMuebles(8);
+    await assertSucceeds(loteCancelaciones(como(env, 'emp1'), 1, 8).commit());
+  });
+
+  it('un lote de 8 cancelaciones con la actualización del pedido se acepta', async () => {
+    await sembrarMuebles(8);
+    const db = como(env, 'emp1');
+    const b = loteCancelaciones(db, 1, 8);
+    b.update(doc(db, 'pedidos', 'p1'), { estado: 'cancelado' });
+    await assertSucceeds(b.commit());
+  });
+
+  it('un lote de 10 cancelaciones supera el límite de accesos y se rechaza', async () => {
+    await sembrarMuebles(10);
+    await assertFails(loteCancelaciones(como(env, 'emp1'), 1, 10).commit());
+  });
+
   it('cancelar sin registro falla', async () => {
     await assertFails(
       updateDoc(doc(como(env, 'emp1'), 'pedidos', 'p1', 'muebles', 'mu1'), { estado: 'cancelado' }),

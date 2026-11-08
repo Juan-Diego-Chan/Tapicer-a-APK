@@ -344,6 +344,20 @@ void main() {
     expect(cambios.docs.map((d) => d.data()['campo']).toSet(), {'cancelacion'});
   });
 
+  test('cancelarPedido con 10 muebles deja 10 registros y cancela el pedido',
+      () async {
+    final r = crear(muebles: List.filled(10, sofa));
+    await r.guardado;
+    final (p, m) = await leer(r.pedidoId);
+    await servicio.cancelarPedido(pedido: p, muebles: m);
+    final cambios = await cambiosDe(r.pedidoId).get();
+    expect(cambios.size, 10);
+    expect(cambios.docs.map((d) => d.data()['campo']).toSet(), {'cancelacion'});
+    final (p2, m2) = await leer(r.pedidoId);
+    expect(p2.estado, EstadoMueble.cancelado);
+    expect(m2.every((x) => x.estado == EstadoMueble.cancelado), isTrue);
+  });
+
   test('un mueble cancelado no se puede reactivar', () async {
     final r = crear();
     await r.guardado;

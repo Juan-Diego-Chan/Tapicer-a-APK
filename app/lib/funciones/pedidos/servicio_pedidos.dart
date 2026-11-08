@@ -279,15 +279,23 @@ class ServicioPedidos {
     });
   }
 
-  /// Los muebles ya entregados no cambian.
+  /// Máximo de muebles cancelados por lote: cada uno cuesta lecturas extra en
+  /// las reglas y un lote de 10 o más supera el límite de 20 accesos.
+  static const _mueblesPorLote = 8;
+
+  /// Los muebles ya entregados no cambian. Se escribe en lotes de a lo más
+  /// [_mueblesPorLote] muebles (cada mueble con su registro en el mismo lote);
+  /// el estado del pedido va en el último lote.
   Future<void> cancelarPedido({
     required Pedido pedido,
     required List<Mueble> muebles,
     DateTime? ahora,
-  }) async {
-    final batch = _db.batch();
+  }) {
     final pedidoRef = _db.collection('pedidos').doc(pedido.id);
     final estados = <EstadoMueble>[];
+    final lotes = <WriteBatch>[];
+    var batch = _db.batch();
+    var enLote = 0;
     for (final m in muebles) {
       if (m.estado == EstadoMueble.entregado ||
           m.estado == EstadoMueble.cancelado) {
@@ -295,11 +303,18 @@ class ServicioPedidos {
         continue;
       }
       estados.add(EstadoMueble.cancelado);
+      if (enLote == _mueblesPorLote) {
+        lotes.add(batch);
+        batch = _db.batch();
+        enLote = 0;
+      }
       _cancelarEnLote(batch, pedidoRef, m);
+      enLote++;
     }
     final cambios = _cambiosDeEstado(pedido, estados, ahora ?? DateTime.now());
     if (cambios != null) batch.update(pedidoRef, cambios);
-    return batch.commit();
+    if (enLote > 0 || cambios != null) lotes.add(batch);
+    return Future.wait(lotes.map((l) => l.commit()));
   }
 
   Future<void> cambiarPrecioMueble({
