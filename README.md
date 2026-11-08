@@ -114,7 +114,7 @@ demás empleados desde la app.
 - Solo el dueño borra líneas y días; borrar una línea regresa el material al inventario.
 - Los costos del mueble (materiales y mano de obra) son solo para el dueño, y marcan "(incompleto)" si falta algún costo.
 - Fabricación y Reparación listan los muebles activos por fecha estimada de entrega.
-- Límites conocidos: un empleado que escriba directo contra Firestore (saltándose la app) puede bajar existencias de más o registrar un consumo sin su descuento; nunca puede subirlas ni ver costos. Cancelar un mueble y agregar otro no deja registro en el historial de precios (se revisará en el Plan 4).
+- Límites conocidos: un empleado que escriba directo contra Firestore (saltándose la app) puede bajar existencias de más o registrar un consumo sin su descuento; nunca puede subirlas ni ver costos.
 
 ## Dinero
 

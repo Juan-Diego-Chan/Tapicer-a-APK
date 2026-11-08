@@ -1,4 +1,4 @@
-// Siembra los emuladores locales (proyecto demo-tapiceria): un dueño, un empleado
+// Siembra los emuladores locales (proyecto demo-tapiceria): un dueño, un empleado,
 // dos materiales (Tela lino gris con el rollo #1 y Guata), una plantilla,
 // un cliente, un pedido de ejemplo y su dinero (pago, caja, entrega, sueldo).
 // Uso: con los emuladores corriendo (firebase emulators:start --only auth,firestore --project demo-tapiceria):
