@@ -9,6 +9,7 @@ import '../funciones/auth/pantalla_inicio_sesion.dart';
 import '../funciones/auth/providers.dart';
 import '../funciones/auth/servicio_sesion.dart';
 import '../funciones/compras/pantalla_lista_compras.dart';
+import '../funciones/contabilidad/pantalla_contabilidad.dart';
 import '../funciones/dinero/pantalla_dinero.dart';
 import '../funciones/inicio/pantalla_inicio.dart';
 import '../funciones/inventario/pantalla_inventario.dart';
@@ -38,6 +39,7 @@ const _rutasConPantalla = {
   '/fabricacion',
   '/reparacion',
   '/dinero',
+  '/contabilidad',
 };
 
 /// Lógica pura de guardia. Devuelve la ruta destino o null si no hay que
@@ -153,6 +155,10 @@ GoRouter crearRouter(Ref ref) {
                 PantallaEntregasEmpleado(uid: s.pathParameters['uid']!),
           ),
         ],
+      ),
+      GoRoute(
+        path: '/contabilidad',
+        builder: (_, _) => const PantallaContabilidad(),
       ),
       for (final e in entradasMenu.where(
         (e) => !_rutasConPantalla.contains(e.ruta),
