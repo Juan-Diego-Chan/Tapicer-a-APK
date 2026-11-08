@@ -30,6 +30,7 @@ void main() {
     String direccion = 'Calle 1',
     DateTime? fecha,
     List<NuevoMueble> muebles = const [sofa, silla],
+    double anticipo = 0,
   }) =>
       servicio.crearPedido(
         clienteId: clienteId,
@@ -42,6 +43,7 @@ void main() {
         fechaEstimada: fecha ?? manana,
         muebles: muebles,
         ahora: ahora,
+        anticipo: anticipo,
       );
 
   Future<int> contar(String c) async => (await db.collection(c).get()).size;
@@ -92,6 +94,38 @@ void main() {
         throwsArgumentError);
     expect(await contar('clientes'), 0);
     expect(await contar('pedidos'), 0);
+  });
+
+  test('anticipo de 500 crea el pago, pagado y la caja', () async {
+    final r = crear(anticipo: 500);
+    await r.guardado;
+    final pagos = (await db.collection('pagos').get()).docs;
+    expect(pagos.length, 1);
+    expect(pagos.single.data()['monto'], 500);
+    expect(pagos.single.data()['pedidoId'], r.pedidoId);
+    final doc = await db.collection('pedidos').doc(r.pedidoId).get();
+    expect(doc.data()!['pagado'], 500);
+    expect(doc.data()!['ultimoPagoId'], pagos.single.id);
+    final caja = await db.collection('cajas').doc('u1').get();
+    expect(caja.data()!['enMano'], 500);
+  });
+
+  test('sin anticipo no crea pago y pagado es 0', () async {
+    final r = crear();
+    await r.guardado;
+    expect(await contar('pagos'), 0);
+    final doc = await db.collection('pedidos').doc(r.pedidoId).get();
+    expect(doc.data()!['pagado'], 0);
+    expect(doc.data()!['ultimoPagoId'], isNull);
+  });
+
+  test('anticipo inválido lanza y no escribe', () async {
+    // total = 650 + 100 + 200 = 950
+    expect(() => crear(anticipo: 2000), throwsArgumentError);
+    expect(() => crear(anticipo: -1), throwsArgumentError);
+    expect(() => crear(anticipo: double.nan), throwsArgumentError);
+    expect(await contar('pedidos'), 0);
+    expect(await contar('pagos'), 0);
   });
 
   test('crearPedido devuelve el id antes de esperar guardado', () {
@@ -224,6 +258,118 @@ void main() {
     final (p2, m2) = await leer(r.pedidoId);
     expect(m2.length, 2);
     expect(p2.estado, EstadoMueble.recibido);
+  });
+
+  test('agregarMueble deja el registro de alta y lo enlaza', () async {
+    final r = crear(muebles: [sofa]);
+    await r.guardado;
+    final (p, m) = await leer(r.pedidoId);
+    const nuevo = NuevoMueble(
+        tipoTrabajo: TipoTrabajo.reparacion, tipoMueble: 'Silla', precio: 600);
+    await servicio.agregarMueble(pedido: p, muebles: m, nuevo: nuevo);
+    final cambios = await cambiosDe(r.pedidoId).get();
+    expect(cambios.size, 1);
+    final c = cambios.docs.single.data();
+    expect(c['campo'], 'alta');
+    expect(c['anterior'], 0);
+    expect(c['nuevo'], 600);
+    expect(c['motivo'], isNull);
+    expect(c['usuarioId'], 'u1');
+    final (_, m2) = await leer(r.pedidoId);
+    final creado = m2.firstWhere((x) => x.tipoMueble == 'Silla');
+    expect(c['muebleId'], creado.id);
+    final doc = await db
+        .collection('pedidos')
+        .doc(r.pedidoId)
+        .collection('muebles')
+        .doc(creado.id)
+        .get();
+    expect(doc['ultimoCambioId'], cambios.docs.single.id);
+  });
+
+  test('agregarMueble redondea el precio igual que su registro', () async {
+    final r = crear(muebles: [sofa]);
+    await r.guardado;
+    final (p, m) = await leer(r.pedidoId);
+    const nuevo = NuevoMueble(
+        tipoTrabajo: TipoTrabajo.reparacion,
+        tipoMueble: 'Silla',
+        precio: 600.005);
+    await servicio.agregarMueble(pedido: p, muebles: m, nuevo: nuevo);
+    final c = (await cambiosDe(r.pedidoId).get()).docs.single.data();
+    final (_, m2) = await leer(r.pedidoId);
+    final creado = m2.firstWhere((x) => x.tipoMueble == 'Silla');
+    expect(creado.precio, c['nuevo']);
+  });
+
+  test('cancelar un mueble deja el registro de cancelación', () async {
+    final r = crear();
+    await r.guardado;
+    final (p, m) = await leer(r.pedidoId);
+    final s = m.firstWhere((x) => x.tipoMueble == 'Sofá');
+    await servicio.cambiarEstadoMueble(
+        pedido: p, muebles: m, muebleId: s.id, nuevo: EstadoMueble.cancelado);
+    final cambios = await cambiosDe(r.pedidoId).get();
+    expect(cambios.size, 1);
+    final c = cambios.docs.single.data();
+    expect(c['campo'], 'cancelacion');
+    expect(c['usuarioId'], 'u1');
+    expect(c['muebleId'], s.id);
+    expect(c['anterior'], 650);
+    expect(c['nuevo'], 0);
+    expect(c['motivo'], isNull);
+    final doc = await db
+        .collection('pedidos')
+        .doc(r.pedidoId)
+        .collection('muebles')
+        .doc(s.id)
+        .get();
+    expect(doc['ultimoCambioId'], cambios.docs.single.id);
+    expect(doc['estado'], 'cancelado');
+  });
+
+  test('cancelarPedido deja un registro por mueble que cancela', () async {
+    final r = crear(muebles: [sofa, silla, sofa]);
+    await r.guardado;
+    var (p, m) = await leer(r.pedidoId);
+    await servicio.cambiarEstadoMueble(
+        pedido: p,
+        muebles: m,
+        muebleId: m.first.id,
+        nuevo: EstadoMueble.entregado);
+    (p, m) = await leer(r.pedidoId);
+    await servicio.cancelarPedido(pedido: p, muebles: m);
+    final cambios = await cambiosDe(r.pedidoId).get();
+    expect(cambios.size, 2);
+    expect(cambios.docs.map((d) => d.data()['campo']).toSet(), {'cancelacion'});
+  });
+
+  test('cancelarPedido con 10 muebles deja 10 registros y cancela el pedido',
+      () async {
+    final r = crear(muebles: List.filled(10, sofa));
+    await r.guardado;
+    final (p, m) = await leer(r.pedidoId);
+    await servicio.cancelarPedido(pedido: p, muebles: m);
+    final cambios = await cambiosDe(r.pedidoId).get();
+    expect(cambios.size, 10);
+    expect(cambios.docs.map((d) => d.data()['campo']).toSet(), {'cancelacion'});
+    final (p2, m2) = await leer(r.pedidoId);
+    expect(p2.estado, EstadoMueble.cancelado);
+    expect(m2.every((x) => x.estado == EstadoMueble.cancelado), isTrue);
+  });
+
+  test('un mueble cancelado no se puede reactivar', () async {
+    final r = crear();
+    await r.guardado;
+    var (p, m) = await leer(r.pedidoId);
+    final id = m.first.id;
+    await servicio.cambiarEstadoMueble(
+        pedido: p, muebles: m, muebleId: id, nuevo: EstadoMueble.cancelado);
+    (p, m) = await leer(r.pedidoId);
+    expect(
+        () => servicio.cambiarEstadoMueble(
+            pedido: p, muebles: m, muebleId: id, nuevo: EstadoMueble.recibido),
+        throwsArgumentError);
   });
 
   test('cambiarPrecioMueble registra el cambio', () async {

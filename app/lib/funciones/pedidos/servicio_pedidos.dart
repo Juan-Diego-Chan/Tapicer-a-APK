@@ -1,7 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../dominio/dinero.dart';
 import '../../dominio/inventario.dart';
 import '../../dominio/pedidos.dart';
+import '../../dominio/usuario.dart';
+import '../dinero/servicio_dinero.dart';
 
 class NuevoMueble {
   final TipoTrabajo tipoTrabajo;
@@ -24,18 +27,37 @@ class NuevoMueble {
 class ServicioPedidos {
   final FirebaseFirestore _db;
   final String _usuarioId;
+  final Rol _rol;
 
-  ServicioPedidos(this._db, this._usuarioId);
+  ServicioPedidos(this._db, this._usuarioId, {Rol rol = Rol.empleado})
+    // ignore: prefer_initializing_formals
+    : _rol = rol;
 
-  Map<String, dynamic> _datosMueble(NuevoMueble m) => {
-        'tipoTrabajo': m.tipoTrabajo.clave,
-        'tipoMueble': m.tipoMueble.trim(),
-        'plantillaId': m.plantillaId,
-        'precio': m.precio,
-        'comentarios': m.comentarios.trim(),
-        'estado': EstadoMueble.recibido.clave,
-        'ultimoCambioId': null,
-      };
+  Map<String, dynamic> _datosMueble(NuevoMueble m, {String? cambioId}) => {
+    'tipoTrabajo': m.tipoTrabajo.clave,
+    'tipoMueble': m.tipoMueble.trim(),
+    'plantillaId': m.plantillaId,
+    'precio': redondear2(m.precio),
+    'comentarios': m.comentarios.trim(),
+    'estado': EstadoMueble.recibido.clave,
+    'ultimoCambioId': cambioId,
+  };
+
+  /// Registro de historial sin motivo para altas y cancelaciones.
+  Map<String, dynamic> _registroAltaCancelacion(
+    CampoPrecio campo,
+    String muebleId,
+    double anterior,
+    double nuevo,
+  ) => {
+    'campo': campo.name,
+    'muebleId': muebleId,
+    'anterior': anterior,
+    'nuevo': nuevo,
+    'motivo': null,
+    'usuarioId': _usuarioId,
+    'fecha': FieldValue.serverTimestamp(),
+  };
 
   void _validarMueble(NuevoMueble m) {
     if (!m.precio.isFinite || m.precio < 0) {
@@ -68,6 +90,8 @@ class ServicioPedidos {
     required DateTime fechaEstimada,
     required List<NuevoMueble> muebles,
     DateTime? ahora,
+    double anticipo = 0,
+    FormaPago formaAnticipo = FormaPago.efectivo,
   }) {
     final momento = ahora ?? DateTime.now();
     if (muebles.isEmpty) throw ArgumentError('Agrega al menos un mueble');
@@ -82,9 +106,22 @@ class ServicioPedidos {
       throw ArgumentError('Falta la dirección');
     }
     muebles.forEach(_validarMueble);
+    if (!anticipo.isFinite || anticipo < 0) {
+      throw ArgumentError('El anticipo no puede ser negativo');
+    }
+    final pagadoInicial = redondear2(anticipo);
+    final total = redondear2(
+      totalPedido([for (final m in muebles) m.precio], envio),
+    );
+    if (pagadoInicial > total) {
+      throw ArgumentError('El anticipo es mayor que el total');
+    }
     final hoy = DateTime(momento.year, momento.month, momento.day);
-    final dia =
-        DateTime(fechaEstimada.year, fechaEstimada.month, fechaEstimada.day);
+    final dia = DateTime(
+      fechaEstimada.year,
+      fechaEstimada.month,
+      fechaEstimada.day,
+    );
     if (dia.isBefore(hoy)) {
       throw ArgumentError('La fecha estimada no puede ser anterior a hoy');
     }
@@ -102,6 +139,14 @@ class ServicioPedidos {
       batch.set(ref, datosCliente);
     }
     final pedidoRef = _db.collection('pedidos').doc();
+    final pagoId = pagadoInicial > 0
+        ? ServicioDinero(_db, _usuarioId, _rol).agregarPagoAlLote(
+            batch,
+            pedidoId: pedidoRef.id,
+            monto: pagadoInicial,
+            forma: formaAnticipo,
+          )
+        : null;
     batch.set(pedidoRef, {
       'folio': folioPara(momento, pedidoRef.id),
       'clienteId': idCliente,
@@ -116,6 +161,8 @@ class ServicioPedidos {
       'estado': EstadoMueble.recibido.clave,
       'creadoPor': _usuarioId,
       'ultimoCambioId': null,
+      'pagado': pagadoInicial,
+      'ultimoPagoId': pagoId,
     });
     for (final m in muebles) {
       batch.set(pedidoRef.collection('muebles').doc(), _datosMueble(m));
@@ -151,8 +198,9 @@ class ServicioPedidos {
     DateTime? ahora,
   }) {
     if (muebles.isEmpty) return null;
-    final cambios = _cambiosDeEstado(
-        pedido, [for (final m in muebles) m.estado], ahora ?? DateTime.now());
+    final cambios = _cambiosDeEstado(pedido, [
+      for (final m in muebles) m.estado,
+    ], ahora ?? DateTime.now());
     if (cambios == null) return null;
     return _db.collection('pedidos').doc(pedido.id).update(cambios);
   }
@@ -166,11 +214,22 @@ class ServicioPedidos {
     _validarMueble(nuevo);
     final batch = _db.batch();
     final pedidoRef = _db.collection('pedidos').doc(pedido.id);
-    batch.set(pedidoRef.collection('muebles').doc(), _datosMueble(nuevo));
-    final cambios = _cambiosDeEstado(
-        pedido,
-        [for (final m in muebles) m.estado, EstadoMueble.recibido],
-        ahora ?? DateTime.now());
+    final muebleRef = pedidoRef.collection('muebles').doc();
+    final cambioRef = pedidoRef.collection('cambios_precio').doc();
+    batch.set(
+      cambioRef,
+      _registroAltaCancelacion(
+        CampoPrecio.alta,
+        muebleRef.id,
+        0,
+        redondear2(nuevo.precio),
+      ),
+    );
+    batch.set(muebleRef, _datosMueble(nuevo, cambioId: cambioRef.id));
+    final cambios = _cambiosDeEstado(pedido, [
+      for (final m in muebles) m.estado,
+      EstadoMueble.recibido,
+    ], ahora ?? DateTime.now());
     if (cambios != null) batch.update(pedidoRef, cambios);
     return batch.commit();
   }
@@ -185,27 +244,58 @@ class ServicioPedidos {
     if (!muebles.any((m) => m.id == muebleId)) {
       throw ArgumentError('El mueble no pertenece al pedido');
     }
+    final actual = muebles.firstWhere((m) => m.id == muebleId);
+    if (actual.estado == EstadoMueble.cancelado) {
+      throw ArgumentError('Un mueble cancelado no se puede reactivar');
+    }
     final batch = _db.batch();
     final pedidoRef = _db.collection('pedidos').doc(pedido.id);
-    batch.update(pedidoRef.collection('muebles').doc(muebleId),
-        {'estado': nuevo.clave});
-    final cambios = _cambiosDeEstado(
-        pedido,
-        [for (final m in muebles) m.id == muebleId ? nuevo : m.estado],
-        ahora ?? DateTime.now());
+    final muebleRef = pedidoRef.collection('muebles').doc(muebleId);
+    if (nuevo == EstadoMueble.cancelado) {
+      _cancelarEnLote(batch, pedidoRef, actual);
+    } else {
+      batch.update(muebleRef, {'estado': nuevo.clave});
+    }
+    final cambios = _cambiosDeEstado(pedido, [
+      for (final m in muebles) m.id == muebleId ? nuevo : m.estado,
+    ], ahora ?? DateTime.now());
     if (cambios != null) batch.update(pedidoRef, cambios);
     return batch.commit();
   }
 
-  /// Los muebles ya entregados no cambian.
+  void _cancelarEnLote(
+    WriteBatch batch,
+    DocumentReference<Map<String, dynamic>> pedidoRef,
+    Mueble m,
+  ) {
+    final cambioRef = pedidoRef.collection('cambios_precio').doc();
+    batch.set(
+      cambioRef,
+      _registroAltaCancelacion(CampoPrecio.cancelacion, m.id, m.precio, 0),
+    );
+    batch.update(pedidoRef.collection('muebles').doc(m.id), {
+      'estado': EstadoMueble.cancelado.clave,
+      'ultimoCambioId': cambioRef.id,
+    });
+  }
+
+  /// Máximo de muebles cancelados por lote: cada uno cuesta lecturas extra en
+  /// las reglas y un lote de 10 o más supera el límite de 20 accesos.
+  static const _mueblesPorLote = 8;
+
+  /// Los muebles ya entregados no cambian. Se escribe en lotes de a lo más
+  /// [_mueblesPorLote] muebles (cada mueble con su registro en el mismo lote);
+  /// el estado del pedido va en el último lote.
   Future<void> cancelarPedido({
     required Pedido pedido,
     required List<Mueble> muebles,
     DateTime? ahora,
-  }) async {
-    final batch = _db.batch();
+  }) {
     final pedidoRef = _db.collection('pedidos').doc(pedido.id);
     final estados = <EstadoMueble>[];
+    final lotes = <WriteBatch>[];
+    var batch = _db.batch();
+    var enLote = 0;
     for (final m in muebles) {
       if (m.estado == EstadoMueble.entregado ||
           m.estado == EstadoMueble.cancelado) {
@@ -213,12 +303,18 @@ class ServicioPedidos {
         continue;
       }
       estados.add(EstadoMueble.cancelado);
-      batch.update(pedidoRef.collection('muebles').doc(m.id),
-          {'estado': EstadoMueble.cancelado.clave});
+      if (enLote == _mueblesPorLote) {
+        lotes.add(batch);
+        batch = _db.batch();
+        enLote = 0;
+      }
+      _cancelarEnLote(batch, pedidoRef, m);
+      enLote++;
     }
     final cambios = _cambiosDeEstado(pedido, estados, ahora ?? DateTime.now());
     if (cambios != null) batch.update(pedidoRef, cambios);
-    return batch.commit();
+    if (enLote > 0 || cambios != null) lotes.add(batch);
+    return Future.wait(lotes.map((l) => l.commit()));
   }
 
   Future<void> cambiarPrecioMueble({
@@ -246,8 +342,10 @@ class ServicioPedidos {
       'usuarioId': _usuarioId,
       'fecha': FieldValue.serverTimestamp(),
     });
-    batch.update(pedidoRef.collection('muebles').doc(mueble.id),
-        {'precio': redondear2(nuevo), 'ultimoCambioId': cambioRef.id});
+    batch.update(pedidoRef.collection('muebles').doc(mueble.id), {
+      'precio': redondear2(nuevo),
+      'ultimoCambioId': cambioRef.id,
+    });
     return batch.commit();
   }
 

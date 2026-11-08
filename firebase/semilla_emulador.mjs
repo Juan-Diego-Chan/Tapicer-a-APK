@@ -1,6 +1,6 @@
-// Siembra los emuladores locales (proyecto demo-tapiceria): un dueño, un empleado
+// Siembra los emuladores locales (proyecto demo-tapiceria): un dueño, un empleado,
 // dos materiales (Tela lino gris con el rollo #1 y Guata), una plantilla,
-// un cliente y un pedido de ejemplo.
+// un cliente, un pedido de ejemplo y su dinero (pago, caja, entrega, sueldo).
 // Uso: con los emuladores corriendo (firebase emulators:start --only auth,firestore --project demo-tapiceria):
 //   node firebase/semilla_emulador.mjs
 // Es idempotente: se puede correr varias veces. Solo para desarrollo local:
@@ -218,6 +218,8 @@ await escribir('pedidos/pedido-demo', {
   estado: texto('recibido'),
   creadoPor: texto(uidDueno),
   ultimoCambioId: nulo(),
+  pagado: entero(1500),
+  ultimoPagoId: texto('pago-demo'),
 });
 await escribir('pedidos/pedido-demo/muebles/mueble-demo', {
   tipoTrabajo: texto('fabricacion'),
@@ -229,3 +231,32 @@ await escribir('pedidos/pedido-demo/muebles/mueble-demo', {
   ultimoCambioId: nulo(),
 });
 console.log(`Pedido: ${folio} (María López, sillón de 3 plazas, $6500 + envío $300)`);
+
+// Dinero: el empleado cobró $1500 en efectivo del pedido (saldo $5300), tiene
+// esa caja en las manos, una entrega pendiente de $1000 y un sueldo pagado.
+const haceTresDias = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+await escribir('pagos/pago-demo', {
+  pedidoId: texto('pedido-demo'),
+  monto: entero(1500),
+  forma: texto('efectivo'),
+  recibidoPor: texto(uidEmpleado),
+  fecha: fecha(ahora),
+});
+await escribir(`cajas/${uidEmpleado}`, {
+  enMano: entero(1500),
+  ultimoPagoId: texto('pago-demo'),
+});
+await escribir('entregas/entrega-demo', {
+  empleadoId: texto(uidEmpleado),
+  monto: entero(1000),
+  forma: texto('efectivo'),
+  fecha: fecha(ahora),
+  estado: texto('pendiente'),
+  revisadoEn: nulo(),
+});
+await escribir('pagos_sueldo/sueldo-demo', {
+  usuarioId: texto(uidEmpleado),
+  monto: entero(1800),
+  fecha: fecha(haceTresDias),
+});
+console.log('Dinero: pago $1500 (saldo $5300), entrega pendiente $1000, sueldo $1800');

@@ -114,7 +114,18 @@ demás empleados desde la app.
 - Solo el dueño borra líneas y días; borrar una línea regresa el material al inventario.
 - Los costos del mueble (materiales y mano de obra) son solo para el dueño, y marcan "(incompleto)" si falta algún costo.
 - Fabricación y Reparación listan los muebles activos por fecha estimada de entrega.
-- Límites conocidos: un empleado que escriba directo contra Firestore (saltándose la app) puede bajar existencias de más o registrar un consumo sin su descuento; nunca puede subirlas ni ver costos. Cancelar un mueble y agregar otro no deja registro en el historial de precios (se revisará en el Plan 4).
+- Límites conocidos: un empleado que escriba directo contra Firestore (saltándose la app) puede bajar existencias de más o registrar un consumo sin su descuento; nunca puede subirlas ni ver costos.
+
+## Dinero
+
+- Los pagos de un pedido se registran en efectivo o por transferencia; el saldo es precios + envío − pagado. Se puede dar un anticipo al crear el pedido.
+- Una devolución es un pago con monto negativo; solo la registra el dueño.
+- Cada empleado tiene una caja con el efectivo que lleva en las manos: sube con los pagos que cobra y baja con las entregas.
+- El empleado registra una entrega de dinero al dueño; queda pendiente hasta que el dueño la confirma o la rechaza. Rechazada, el dinero sigue en manos del empleado.
+- Solo el dueño borra pagos; borrar un pago ajusta el pagado del pedido y la caja de quien lo cobró.
+- Los pagos de sueldo a empleados son solo del dueño: se registran en Usuarios y quedan en su historial.
+- Cancelar un mueble y agregar uno nuevo quedan en el historial de precios ("Mueble cancelado", "Mueble agregado").
+- Límites conocidos: la fecha de un pago o entrega registrado sin conexión es la de sincronización; un pago mayor al saldo solo lo bloquea la app.
 
 ## Despliegue de reglas
 

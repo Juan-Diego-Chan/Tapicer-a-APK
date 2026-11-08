@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../dominio/usuario.dart';
 import '../../nucleo/formatos.dart';
@@ -122,6 +123,7 @@ class _FilaUsuario extends ConsumerWidget {
       sueldo = s == null ? 'Sin sueldo' : formatearDinero(s);
     }
     return ListTile(
+      onTap: esDueno ? null : () => context.push('/usuarios/${usuario.uid}'),
       title: Text(usuario.nombre),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
