@@ -365,9 +365,12 @@ service cloud.firestore {
       return getAfter(ruta).data.ultimoPagoId == id
         && igualDinero(getAfter(ruta).data.pagado - pagadoAntes(ruta), monto);
     }
-    // Lado de la caja: lo mismo con enMano.
+    // Lado de la caja: lo mismo con enMano. ultimaEntregaId no cambia, para que un
+    // mismo descuento no cuente a la vez como pago borrado y como entrega confirmada.
     function pagoEnCaja(id, uid, monto) {
       return getAfter(rutaCaja(uid)).data.ultimoPagoId == id
+        && getAfter(rutaCaja(uid)).data.get('ultimaEntregaId', null)
+          == (exists(rutaCaja(uid)) ? get(rutaCaja(uid)).data.get('ultimaEntregaId', null) : null)
         && igualDinero(getAfter(rutaCaja(uid)).data.enMano - enManoAntes(rutaCaja(uid)), monto);
     }
 

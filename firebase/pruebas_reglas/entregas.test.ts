@@ -261,3 +261,63 @@ describe('pagos de sueldo', () => {
     await assertFails(deleteDoc(doc(como(env, 'emp1'), 'pagos_sueldo', 'ps1')));
   });
 });
+
+describe('un descuento de caja no cubre pago borrado y entrega a la vez', () => {
+  beforeEach(async () => {
+    await sembrar('pedidos', 'pe1', {
+      folio: '261107-ENT',
+      clienteId: 'cl1',
+      cliente: { nombre: 'Ana López', telefono: '999 123 4567', direccion: 'Calle 60 #123' },
+      entrega: 'recoge',
+      envio: 0,
+      comentarios: '',
+      fechaIngreso: Timestamp.now(),
+      fechaEstimada: Timestamp.now(),
+      fechaTerminado: null,
+      fechaEntregado: null,
+      estado: 'recibido',
+      creadoPor: 'emp1',
+      ultimoCambioId: null,
+      pagado: 300,
+      ultimoPagoId: 'pg1',
+    });
+    await sembrar('pagos', 'pg1', {
+      pedidoId: 'pe1',
+      monto: 300,
+      forma: 'efectivo',
+      recibidoPor: 'emp1',
+      fecha: Timestamp.now(),
+    });
+    await sembrar('cajas', 'emp1', { enMano: 800, ultimoPagoId: 'pg1' });
+    await sembrar('entregas', 'en1', entrega({ fecha: Timestamp.now() }));
+  });
+
+  function loteDoble(db: Firestore, cajaExtra: Record<string, unknown>) {
+    const b = writeBatch(db);
+    b.delete(doc(db, 'pagos', 'pg1'));
+    b.update(doc(db, 'pedidos', 'pe1'), { pagado: increment(-300), ultimoPagoId: 'pg1' });
+    b.update(doc(db, 'entregas', 'en1'), { estado: 'confirmada', revisadoEn: serverTimestamp() });
+    b.set(doc(db, 'cajas', 'emp1'), { enMano: increment(-300), ultimaEntregaId: 'en1', ...cajaExtra }, { merge: true });
+    return b;
+  }
+
+  it('borrar pg1 y confirmar en1 con un solo -300 en la caja falla', async () => {
+    await assertFails(loteDoble(como(env, 'due1'), {}).commit());
+    expect((await leer('cajas', 'emp1'))?.enMano).toBe(800);
+  });
+
+  it('lo mismo poniendo ultimoPagoId en la caja falla', async () => {
+    await assertFails(loteDoble(como(env, 'due1'), { ultimoPagoId: 'pg1' }).commit());
+  });
+
+  it('cada operación por separado sí pasa (caja 800 → 500 → 200)', async () => {
+    const db = como(env, 'due1');
+    const b = writeBatch(db);
+    b.delete(doc(db, 'pagos', 'pg1'));
+    b.update(doc(db, 'pedidos', 'pe1'), { pagado: increment(-300), ultimoPagoId: 'pg1' });
+    b.update(doc(db, 'cajas', 'emp1'), { enMano: increment(-300), ultimoPagoId: 'pg1' });
+    await assertSucceeds(b.commit());
+    await assertSucceeds(loteConfirmar(db, 'en1', 300).commit());
+    expect((await leer('cajas', 'emp1'))?.enMano).toBe(200);
+  });
+});
