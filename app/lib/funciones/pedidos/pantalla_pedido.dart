@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../dominio/pedidos.dart';
 import '../../nucleo/formatos.dart';
+import '../dinero/seccion_pagos.dart';
 import '../inventario/pantalla_inventario.dart' show esDueno;
 import '../usuarios/providers.dart';
 import 'dialogo_mueble.dart';
@@ -180,11 +181,7 @@ class _DetalleState extends ConsumerState<_Detalle> {
                   ),
             onTap: () => context.push('/pedidos/${pedido.id}/muebles/${m.id}'),
           ),
-        const SizedBox(height: 8),
-        Text(
-          'Total: ${formatearDinero(total)}',
-          style: tema.textTheme.titleLarge,
-        ),
+        SeccionPagos(pedido: pedido, total: total),
         const SizedBox(height: 16),
         Wrap(
           spacing: 8,
