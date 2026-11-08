@@ -72,10 +72,17 @@ class SeccionPagos extends ConsumerWidget {
 }
 
 class _FilaPago extends StatelessWidget {
-  const _FilaPago({required this.pago, required this.subtitulo, this.alBorrar});
+  const _FilaPago({
+    required this.pago,
+    required this.subtitulo,
+    this.conBorrar = false,
+    this.alBorrar,
+  });
 
   final Pago pago;
   final String subtitulo;
+  final bool conBorrar;
+  // Con conBorrar y sin alBorrar el botón aparece deshabilitado.
   final VoidCallback? alBorrar;
 
   @override
@@ -88,7 +95,7 @@ class _FilaPago extends StatelessWidget {
         style: pago.esDevolucion ? TextStyle(color: cs.error) : null,
       ),
       subtitle: Text(subtitulo),
-      trailing: alBorrar == null
+      trailing: !conBorrar
           ? null
           : IconButton(
               tooltip: 'Borrar pago',
@@ -142,7 +149,7 @@ class _PagosDueno extends ConsumerWidget {
         ],
       ),
     );
-    if (confirmado != true) return;
+    if (confirmado != true || !context.mounted) return;
     try {
       guardarSinEsperar(
         messenger,
@@ -158,7 +165,8 @@ class _PagosDueno extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final pagos = ref.watch(pagosPedidoProvider(pedidoId)).value ?? const [];
-    final cajas = ref.watch(cajasProvider).value ?? const <String, double>{};
+    // Sin las cajas no se sabe si el pago fue de un empleado: no se borra.
+    final cajas = ref.watch(cajasProvider).value;
     final usuarios = ref.watch(usuariosProvider).value ?? const [];
 
     String quien(String uid) {
@@ -174,8 +182,11 @@ class _PagosDueno extends ConsumerWidget {
           pago: p,
           subtitulo: '${quien(p.recibidoPor)} · ${formatearFecha(p.fecha)}',
           // Las reglas dependen de si esa caja existe, no del rol.
-          alBorrar: () =>
-              _borrar(context, ref, p, cajas.containsKey(p.recibidoPor)),
+          conBorrar: true,
+          alBorrar: cajas == null
+              ? null
+              : () =>
+                  _borrar(context, ref, p, cajas.containsKey(p.recibidoPor)),
         ),
     ]);
   }

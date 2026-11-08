@@ -50,6 +50,7 @@ Future<FakeFirebaseFirestore> _montar(
   List<Pago> pagos = const [],
   Map<String, double> cajas = const {},
   bool lanzaDueno = false,
+  bool cajasNuncaCargan = false,
 }) async {
   t.view.physicalSize = const Size(800, 2000);
   t.view.devicePixelRatio = 1;
@@ -74,7 +75,11 @@ Future<FakeFirebaseFirestore> _montar(
           cajasProvider.overrideWith((ref) => throw StateError('no')),
         ] else ...[
           pagosPedidoProvider.overrideWith((ref, id) => Stream.value(pagos)),
-          cajasProvider.overrideWith((ref) => Stream.value(cajas)),
+          cajasProvider.overrideWith(
+            (ref) => cajasNuncaCargan
+                ? const Stream<Map<String, double>>.empty()
+                : Stream.value(cajas),
+          ),
         ],
         misPagosPedidoProvider.overrideWith((ref, id) => Stream.value(pagos)),
       ],
@@ -217,5 +222,27 @@ void main() {
     expect(pagos.docs.length, 1);
     expect(pagos.docs.single.data()['monto'], 1000);
     expect(pagos.docs.single.data()['forma'], 'efectivo');
+  });
+
+  testWidgets('sin cajas cargadas el botón de borrar está deshabilitado', (
+    t,
+  ) async {
+    await _montar(
+      t,
+      Rol.dueno,
+      _pedido(pagado: 500),
+      pagos: [_pago('a', 500, 'u2')],
+      cajasNuncaCargan: true,
+    );
+    final boton = t.widget<IconButton>(
+      find.widgetWithIcon(IconButton, Icons.delete_outline),
+    );
+    expect(boton.onPressed, isNull);
+  });
+
+  testWidgets('saldo 0 muestra pagado por completo y no deja pagar', (t) async {
+    await _montar(t, Rol.empleado, _pedido(pagado: 1500));
+    expect(find.text('Pagado por completo'), findsOneWidget);
+    expect(find.text('Registrar pago'), findsNothing);
   });
 }
