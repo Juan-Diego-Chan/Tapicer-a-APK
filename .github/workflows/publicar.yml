@@ -36,6 +36,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+          cache: gradle
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -50,7 +51,15 @@ jobs:
           TAPICERIA_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           TAPICERIA_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           TAPICERIA_EXIGIR_FIRMA: "true"
-        run: flutter build apk --release
+        # Reintentos por las fallas de red al descargar Gradle o Kotlin.
+        shell: bash
+        run: |
+          for intento in 1 2 3; do
+            flutter build apk --release && exit 0
+            echo "Intento $intento falló; se reintenta en 30 s"
+            sleep 30
+          done
+          exit 1
       - name: Renombrar el APK
         run: mv build/app/outputs/flutter-apk/app-release.apk "tapiceria-${{ github.ref_name }}.apk"
       - uses: softprops/action-gh-release@v2
