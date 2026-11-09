@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -6,6 +8,23 @@ plugins {
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// Datos de firma: primero las variables de entorno TAPICERIA_*, luego key.properties.
+val propiedadesLlave = Properties().apply {
+    val archivo = rootProject.file("key.properties")
+    if (archivo.exists()) archivo.inputStream().use { load(it) }
+}
+
+fun datoFirma(variable: String, propiedad: String): String? =
+    System.getenv(variable)?.takeIf { it.isNotBlank() }
+        ?: propiedadesLlave.getProperty(propiedad)?.takeIf { it.isNotBlank() }
+
+val firmaStoreFile = datoFirma("TAPICERIA_KEYSTORE", "storeFile")
+val firmaStorePassword = datoFirma("TAPICERIA_KEYSTORE_PASSWORD", "storePassword")
+val firmaKeyAlias = datoFirma("TAPICERIA_KEY_ALIAS", "keyAlias")
+val firmaKeyPassword = datoFirma("TAPICERIA_KEY_PASSWORD", "keyPassword")
+val hayLlaveDeFirma = firmaStoreFile != null && firmaStorePassword != null &&
+    firmaKeyAlias != null && firmaKeyPassword != null
 
 android {
     namespace = "mx.tapiceria.tapiceria"
@@ -33,11 +52,25 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (hayLlaveDeFirma) {
+            create("release") {
+                storeFile = file(firmaStoreFile!!)
+                storePassword = firmaStorePassword
+                keyAlias = firmaKeyAlias
+                keyPassword = firmaKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hayLlaveDeFirma) {
+                signingConfigs.getByName("release")
+            } else {
+                logger.warn("Sin llave de firma: el APK de release usa la firma de depuración")
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

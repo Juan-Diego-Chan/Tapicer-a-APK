@@ -145,6 +145,63 @@ Si las escrituras en Firestore fallan después de que se creó la cuenta de
 Authentication de un empleado, la cuenta queda huérfana. Reintenta con otro
 correo, o crea el documento `usuarios/{uid}` a mano.
 
+## Publicar una versión
+
+**Respalda la llave de firma.** Guarda `tapiceria.jks` y sus contraseñas en al
+menos dos lugares seguros (por ejemplo un USB y tu gestor de contraseñas),
+fuera del repositorio. Si la pierdes, los teléfonos dejan de aceptar
+actualizaciones de la app y tendrás que desinstalarla y perder los datos locales.
+Nunca subas la llave ni `key.properties` a git.
+
+1. Crea la llave (una sola vez) y guárdala fuera del repositorio:
+
+   ```
+   keytool -genkey -v -keystore tapiceria.jks -keyalg RSA -keysize 2048 -validity 10000 -alias tapiceria
+   ```
+
+2. Carga los 4 secretos en GitHub. El keystore va en base64:
+
+   ```
+   base64 -w0 tapiceria.jks | gh secret set KEYSTORE_BASE64
+   gh secret set KEYSTORE_PASSWORD
+   gh secret set KEY_ALIAS
+   gh secret set KEY_PASSWORD
+   ```
+
+   En PowerShell, el primero se hace así:
+
+   ```
+   [Convert]::ToBase64String([IO.File]::ReadAllBytes("tapiceria.jks")) | gh secret set KEYSTORE_BASE64
+   ```
+
+3. Para compilar en local con la llave, crea `app/android/key.properties`
+   (ya está en `.gitignore`):
+
+   ```
+   storeFile=C:/ruta/segura/tapiceria.jks
+   storePassword=...
+   keyAlias=tapiceria
+   keyPassword=...
+   ```
+
+   También sirven las variables de entorno `TAPICERIA_KEYSTORE`,
+   `TAPICERIA_KEYSTORE_PASSWORD`, `TAPICERIA_KEY_ALIAS` y
+   `TAPICERIA_KEY_PASSWORD`, que tienen prioridad. Sin llave, el APK de release
+   se firma con la de depuración y Gradle avisa.
+
+4. Sube la versión en `app/pubspec.yaml` (`version:`) y publica la etiqueta:
+
+   ```
+   git tag v1.0.0 && git push origin v1.0.0
+   ```
+
+   El workflow `.github/workflows/publicar.yml` prueba, compila el APK firmado
+   y lo adjunta a un Release de GitHub.
+
+5. En el teléfono: descarga el APK del Release, permite "instalar apps
+   desconocidas" e instala. La app de release usa el Firebase de producción
+   (`tapiceria-app`), no los emuladores.
+
 ## CI
 
 `.github/workflows/ci.yml` corre en cada push a `main` o a ramas `plan-*` y en
