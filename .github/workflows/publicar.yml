@@ -49,6 +49,7 @@ jobs:
           TAPICERIA_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           TAPICERIA_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           TAPICERIA_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          TAPICERIA_EXIGIR_FIRMA: "true"
         run: flutter build apk --release
       - name: Renombrar el APK
         run: mv build/app/outputs/flutter-apk/app-release.apk "tapiceria-${{ github.ref_name }}.apk"

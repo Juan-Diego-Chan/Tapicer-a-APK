@@ -68,6 +68,9 @@ android {
             signingConfig = if (hayLlaveDeFirma) {
                 signingConfigs.getByName("release")
             } else {
+                if (System.getenv("TAPICERIA_EXIGIR_FIRMA") == "true") {
+                    throw GradleException("Faltan los datos de firma y TAPICERIA_EXIGIR_FIRMA=true")
+                }
                 logger.warn("Sin llave de firma: el APK de release usa la firma de depuración")
                 signingConfigs.getByName("debug")
             }

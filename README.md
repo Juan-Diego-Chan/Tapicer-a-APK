@@ -187,7 +187,13 @@ Nunca subas la llave ni `key.properties` a git.
    También sirven las variables de entorno `TAPICERIA_KEYSTORE`,
    `TAPICERIA_KEYSTORE_PASSWORD`, `TAPICERIA_KEY_ALIAS` y
    `TAPICERIA_KEY_PASSWORD`, que tienen prioridad. Sin llave, el APK de release
-   se firma con la de depuración y Gradle avisa.
+   se firma con la de depuración y Gradle avisa (el aviso "Sin llave de firma"
+   solo se ve con `flutter build apk --release -v`).
+
+   **Ojo:** `flutter build apk --release` falla si la ruta del repositorio tiene
+   caracteres no ASCII (por ejemplo `C:\Tapicería-APK`). Compila desde una copia
+   en una ruta ASCII (por ejemplo `C:	apbuild`) o sáltate la compilación local:
+   para publicar no hace falta, porque el workflow compila el APK.
 
 4. Sube la versión en `app/pubspec.yaml` (`version:`) y publica la etiqueta:
 
