@@ -192,7 +192,7 @@ Nunca subas la llave ni `key.properties` a git.
 
    **Ojo:** `flutter build apk --release` falla si la ruta del repositorio tiene
    caracteres no ASCII (por ejemplo `C:\Tapicería-APK`). Compila desde una copia
-   en una ruta ASCII (por ejemplo `C:	apbuild`) o sáltate la compilación local:
+   en una ruta ASCII (por ejemplo `C:\tapbuild`) o sáltate la compilación local:
    para publicar no hace falta, porque el workflow compila el APK.
 
 4. Sube la versión en `app/pubspec.yaml` (`version:`) y publica la etiqueta:
