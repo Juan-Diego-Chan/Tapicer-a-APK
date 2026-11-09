@@ -234,7 +234,7 @@ class _Contenido extends ConsumerWidget {
           for (final e in r.cobros.porPedido.entries)
             Text('${_folio(e.key)}: ${formatearDinero(e.value)}'),
         ],
-        titulo('Por entregar'),
+        titulo('Por entregar (al día de hoy)'),
         if (cajasAsync.hasError || entregasAsync.hasError)
           const Text('No se pudo cargar')
         else if (cajasAsync.isLoading || entregasAsync.isLoading)
@@ -302,7 +302,7 @@ class _Contenido extends ConsumerWidget {
                   ? TextStyle(color: tema.colorScheme.error)
                   : null,
             ),
-        titulo('Pendientes de cobro'),
+        titulo('Pendientes de cobro (al día de hoy)'),
         if (r.pendientes.isEmpty)
           const Text('Nada pendiente de cobro')
         else

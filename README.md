@@ -132,10 +132,10 @@ demás empleados desde la app.
 Pantalla solo para el dueño (menú "Contabilidad"), por semana, por mes (con flechas para ir a otros periodos) o por rango de fechas. Un rango puede abarcar como máximo 3 meses (93 días): si eliges más, se recorta a los primeros 93 días desde la fecha inicial y la app lo avisa. Así se cuidan las lecturas diarias del plan Spark.
 
 - **Lo cobrado:** pagos del periodo, con el desglose por quién cobró y por forma de pago. Las devoluciones restan.
-- **Por entregar:** el efectivo que cada empleado lleva en las manos. Las entregas que esperan confirmación ya están incluidas en esa cantidad (se muestran como "De eso, por confirmar"); no se suman otra vez.
+- **Por entregar (al día de hoy):** no depende del periodo; es el efectivo que cada empleado lleva en las manos. Las entregas que esperan confirmación ya están incluidas en esa cantidad (se muestran como "De eso, por confirmar"); no se suman otra vez.
 - **Lo gastado:** compras de inventario y pagos de sueldo del periodo.
 - **Ganancia:** por cada mueble entregado, precio menos materiales (costo promedio) menos mano de obra (sueldo semanal entre días laborales, por los días trabajados). Marca "Costo incompleto" en el mueble, en el pedido y en la ganancia total si falta algún costo.
-- **Pendientes de cobro:** pedidos entregados (de los últimos 180 días) o terminados con saldo mayor a cero.
+- **Pendientes de cobro (al día de hoy):** no depende del periodo; pedidos entregados (de los últimos 180 días) o terminados con saldo mayor a cero.
 - **Cómo se asigna al periodo:** los cobros y los gastos, por su propia fecha (la del pago, la compra o el sueldo); la ganancia, por la `fechaEntregado` del pedido, y solo cuentan los pedidos entregados.
 - Límites conocidos: los pendientes de cobro solo revisan entregas de los últimos 180 días; la mano de obra usa el sueldo actual, no el que tenía cuando se trabajó.
 
