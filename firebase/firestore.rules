@@ -612,6 +612,12 @@ service cloud.firestore {
       allow read: if activo();
     }
 
+    // Cambios de precio del periodo (contabilidad, solo dueño). Solo lectura:
+    // las escrituras siguen regidas por la regla anidada de cada pedido.
+    match /{ruta=**}/cambios_precio/{c} {
+      allow read: if esDueno();
+    }
+
     match /plantillas/{id} {
       allow read: if activo();
       allow create, update: if esDueno() && plantillaValida(request.resource.data);
