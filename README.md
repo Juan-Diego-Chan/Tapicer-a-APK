@@ -127,6 +127,18 @@ demás empleados desde la app.
 - Cancelar un mueble y agregar uno nuevo quedan en el historial de precios ("Mueble cancelado", "Mueble agregado").
 - Límites conocidos: la fecha de un pago o entrega registrado sin conexión es la de sincronización; un pago mayor al saldo solo lo bloquea la app.
 
+## Contabilidad
+
+Pantalla solo para el dueño (menú "Contabilidad"), por semana o por mes, con flechas para ir a otros periodos.
+
+- **Lo cobrado:** pagos del periodo, con el desglose por quién cobró y por forma de pago. Las devoluciones restan.
+- **Por entregar:** el efectivo que cada empleado lleva en las manos, más las entregas que esperan confirmación.
+- **Lo gastado:** compras de inventario y pagos de sueldo del periodo.
+- **Ganancia:** por cada mueble entregado, precio menos materiales (costo promedio) menos mano de obra (sueldo semanal entre días laborales, por los días trabajados). Marca "(incompleto)" si falta algún costo.
+- **Pendientes de cobro:** pedidos entregados con saldo mayor a cero.
+- **Cómo se asigna al periodo:** los cobros y los gastos, por su propia fecha (la del pago, la compra o el sueldo); la ganancia, por la `fechaEntregado` del pedido, y solo cuentan los pedidos entregados.
+- Límites conocidos: los pendientes de cobro solo revisan entregas de los últimos 180 días; la mano de obra usa el sueldo actual, no el que tenía cuando se trabajó.
+
 ## Despliegue de reglas
 
 ```

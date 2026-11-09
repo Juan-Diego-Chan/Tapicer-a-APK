@@ -1,6 +1,7 @@
 // Siembra los emuladores locales (proyecto demo-tapiceria): un dueño, un empleado,
 // dos materiales (Tela lino gris con el rollo #1 y Guata), una plantilla,
-// un cliente, un pedido de ejemplo y su dinero (pago, caja, entrega, sueldo).
+// un cliente, un pedido de ejemplo y su dinero (pago, caja, entrega, sueldo),
+// y un pedido entregado para probar Contabilidad.
 // Uso: con los emuladores corriendo (firebase emulators:start --only auth,firestore --project demo-tapiceria):
 //   node firebase/semilla_emulador.mjs
 // Es idempotente: se puede correr varias veces. Solo para desarrollo local:
@@ -260,3 +261,78 @@ await escribir('pagos_sueldo/sueldo-demo', {
   fecha: fecha(haceTresDias),
 });
 console.log('Dinero: pago $1500 (saldo $5300), entrega pendiente $1000, sueldo $1800');
+
+// Pedido ya entregado (para Contabilidad): una silla de reparación de $2500,
+// cobrada $2000 por el dueño (saldo $500), con 1 kg de guata y 1 día del empleado.
+const haceDosDias = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+await escribir('pedidos/pedido-entregado', {
+  folio: texto('261105-ENTR'),
+  clienteId: texto('cliente-maria'),
+  cliente: mapa({
+    nombre: texto('María López'),
+    telefono: texto('999 111 2233'),
+    direccion: texto('Calle 60 #500, Centro'),
+  }),
+  entrega: texto('recoge'),
+  envio: entero(0),
+  comentarios: texto(''),
+  fechaIngreso: fecha(haceDosDias),
+  fechaEstimada: fecha(ahora),
+  fechaTerminado: fecha(ahora),
+  fechaEntregado: fecha(ahora),
+  estado: texto('entregado'),
+  creadoPor: texto(uidDueno),
+  ultimoCambioId: nulo(),
+  pagado: entero(2000),
+  ultimoPagoId: texto('pago-entregado'),
+});
+await escribir('pedidos/pedido-entregado/muebles/mueble-entregado', {
+  tipoTrabajo: texto('reparacion'),
+  tipoMueble: texto('Silla'),
+  plantillaId: nulo(),
+  precio: entero(2500),
+  comentarios: texto(''),
+  estado: texto('entregado'),
+  ultimoCambioId: nulo(),
+});
+const rutaMueble = 'pedidos/pedido-entregado/muebles/mueble-entregado';
+await escribir(`${rutaMueble}/materiales/linea-entregado`, {
+  materialId: texto('guata'),
+  rolloId: nulo(),
+  cantidad: entero(1),
+  delCliente: booleano(false),
+  usuarioId: texto(uidEmpleado),
+  fecha: fecha(ahora),
+});
+await escribir('movimientos/linea-entregado', {
+  tipo: texto('consumo'),
+  materialId: texto('guata'),
+  rolloId: nulo(),
+  cantidad: entero(-1),
+  pedidoId: texto('pedido-entregado'),
+  muebleId: texto('mueble-entregado'),
+  usuarioId: texto(uidEmpleado),
+  fecha: fecha(ahora),
+});
+// El consumo baja la guata de 2 a 1 kg (valor fijo: la semilla sigue idempotente).
+await crearMaterial('guata', {
+  nombre: 'Guata',
+  categoria: 'guata',
+  unidad: 'kg',
+  stockMinimo: 5,
+  existencia: 2 - 1,
+  usaRollos: false,
+});
+await escribir(`${rutaMueble}/dias/dia-entregado`, {
+  usuarioId: texto(uidEmpleado),
+  dias: entero(1),
+  fecha: fecha(ahora),
+});
+await escribir('pagos/pago-entregado', {
+  pedidoId: texto('pedido-entregado'),
+  monto: entero(2000),
+  forma: texto('efectivo'),
+  recibidoPor: texto(uidDueno),
+  fecha: fecha(ahora),
+});
+console.log('Pedido: 261105-ENTR (silla $2500 entregada, pagado $2000, 1 kg de guata, 1 día)');
