@@ -8,6 +8,11 @@ class ResumenPeriodo {
   final Periodo periodo;
   final ResumenCobros cobros;
   final Map<String, Pedido> pedidosDeCobros;
+
+  /// Pedidos y muebles (con los cancelados) a los que pertenecen los
+  /// [cambios], para mostrar su folio y el nombre del mueble.
+  final Map<String, Pedido> pedidosDeCambios;
+  final Map<String, List<Mueble>> mueblesDeCambios;
   final ResumenGastos gastos;
 
   /// Ordenada por ganancia ascendente.
@@ -25,6 +30,8 @@ class ResumenPeriodo {
     required this.periodo,
     required this.cobros,
     required this.pedidosDeCobros,
+    this.pedidosDeCambios = const {},
+    this.mueblesDeCambios = const {},
     required this.gastos,
     required this.ganancias,
     required this.muebles,
@@ -64,13 +71,29 @@ Future<ResumenPeriodo> armarResumen(
   final gastos = resumirGastos(compras: compras, sueldos: sueldos);
 
   // Muebles: una sola lectura por pedido, para ganancias y pendientes.
+  // También los de los cambios de precio, para identificarlos.
+  final idsCambios = cambios.map((c) => c.pedidoId).toSet();
   final ids = {...entregados.map((p) => p.id), ...candidatos.map((p) => p.id)};
-  final listaIds = ids.toList();
+  final listaIds = [...ids, ...idsCambios.where((id) => !ids.contains(id))];
+  final yaCargados = {
+    for (final p in [...entregados, ...candidatos]) p.id: p,
+  };
+  final faltantes = {
+    ...cobros.porPedido.keys,
+    ...idsCambios,
+  }.where((id) => !yaCargados.containsKey(id));
   final resultados = await Future.wait([
-    repo.pedidosPorId(cobros.porPedido.keys),
+    repo.pedidosPorId(faltantes),
     ...listaIds.map(repo.mueblesDe),
   ]);
-  final pedidosDeCobros = resultados[0] as Map<String, Pedido>;
+  final leidos = resultados[0] as Map<String, Pedido>;
+  Map<String, Pedido> pedidosDe(Iterable<String> claves) => {
+    for (final id in claves)
+      if ((yaCargados[id] ?? leidos[id]) != null)
+        id: (yaCargados[id] ?? leidos[id])!,
+  };
+  final pedidosDeCobros = pedidosDe(cobros.porPedido.keys);
+  final pedidosDeCambios = pedidosDe(idsCambios);
   final mueblesPorPedido = {
     for (var i = 0; i < listaIds.length; i++)
       listaIds[i]: resultados[i + 1] as List<Mueble>,
@@ -136,6 +159,10 @@ Future<ResumenPeriodo> armarResumen(
     periodo: periodo,
     cobros: cobros,
     pedidosDeCobros: pedidosDeCobros,
+    pedidosDeCambios: pedidosDeCambios,
+    mueblesDeCambios: {
+      for (final id in idsCambios) id: mueblesPorPedido[id] ?? const [],
+    },
     gastos: gastos,
     ganancias: ganancias,
     muebles: porMenorMargen(ganancias.expand((g) => g.muebles)),

@@ -6,6 +6,9 @@ import 'pedidos.dart';
 
 enum TipoPeriodo { semana, mes, rango }
 
+/// Máximo de días de un rango (3 meses): acota las lecturas del plan Spark.
+const maxDiasRango = 93;
+
 const _meses = [
   'Enero',
   'Febrero',
@@ -63,6 +66,25 @@ class Periodo {
       TipoPeriodo.rango,
       a,
       DateTime(b.year, b.month, b.day + 1),
+    );
+  }
+
+  /// Como [Periodo.rango], pero un rango de más de [maxDiasRango] días se
+  /// recorta a los primeros [maxDiasRango] a partir de la fecha inicial.
+  static ({Periodo periodo, bool recortado}) rangoAcotado(
+    DateTime inicio,
+    DateTime fin,
+  ) {
+    final r = Periodo.rango(inicio, fin);
+    final tope = DateTime(
+      r.desde.year,
+      r.desde.month,
+      r.desde.day + maxDiasRango,
+    );
+    if (!r.hasta.isAfter(tope)) return (periodo: r, recortado: false);
+    return (
+      periodo: Periodo._(TipoPeriodo.rango, r.desde, tope),
+      recortado: true,
     );
   }
 
@@ -281,12 +303,14 @@ GananciaPedido gananciaPedido({
     final manoObra = costoManoObra(diasDe(m.id), costoDiaDe: costos.costoDiaDe);
     suma = suma + materiales + manoObra;
     if (m.estado != EstadoMueble.cancelado) {
-      vivos.add(GananciaMueble(
-        pedido: pedido,
-        mueble: m,
-        materiales: materiales,
-        manoObra: manoObra,
-      ));
+      vivos.add(
+        GananciaMueble(
+          pedido: pedido,
+          mueble: m,
+          materiales: materiales,
+          manoObra: manoObra,
+        ),
+      );
     }
   }
   return GananciaPedido(
@@ -299,7 +323,8 @@ GananciaPedido gananciaPedido({
 
 /// Menor margen primero; margen nulo antes que todos; empate, menor ganancia.
 Map<TipoTrabajo, List<GananciaMueble>> porMenorMargen(
-    Iterable<GananciaMueble> muebles) {
+  Iterable<GananciaMueble> muebles,
+) {
   final r = {for (final t in TipoTrabajo.values) t: <GananciaMueble>[]};
   for (final g in muebles) {
     r[g.mueble.tipoTrabajo]!.add(g);
@@ -344,8 +369,10 @@ List<DiferenciaMaterial> diferenciasMaterial({
     if (m.estado == EstadoMueble.cancelado || m.plantillaId == null) continue;
     final plantilla = plantillaDe(m.plantillaId);
     if (plantilla == null) continue;
-    final comparaciones =
-        estimadoVsUsado(plantilla, usadoPorMaterial(lineasDe(m.id)));
+    final comparaciones = estimadoVsUsado(
+      plantilla,
+      usadoPorMaterial(lineasDe(m.id)),
+    );
     for (final c in comparaciones) {
       if (c.usado > c.estimado * 1.10 + 1e-9) {
         r.add(DiferenciaMaterial(pedido: pedido, mueble: m, comparacion: c));
@@ -356,11 +383,11 @@ List<DiferenciaMaterial> diferenciasMaterial({
 }
 
 double saldoPendiente(Pedido pedido, List<Mueble> muebles) => saldoPedido(
-      totalPedido(
-        muebles
-            .where((m) => m.estado != EstadoMueble.cancelado)
-            .map((m) => m.precio),
-        pedido.envio,
-      ),
-      pedido.pagado,
-    );
+  totalPedido(
+    muebles
+        .where((m) => m.estado != EstadoMueble.cancelado)
+        .map((m) => m.precio),
+    pedido.envio,
+  ),
+  pedido.pagado,
+);

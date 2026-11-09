@@ -67,13 +67,16 @@ class _SelectorPeriodo extends ConsumerWidget {
       context: context,
       firstDate: DateTime(2020),
       lastDate: DateTime(hoy.year, hoy.month, hoy.day + 1),
-      initialDateRange: DateTimeRange(
-        start: periodo.desde,
-        end: _ultimoDia,
-      ),
+      initialDateRange: DateTimeRange(start: periodo.desde, end: _ultimoDia),
     );
     if (r == null) return;
-    ref.read(periodoProvider.notifier).cambiar(Periodo.rango(r.start, r.end));
+    final acotado = Periodo.rangoAcotado(r.start, r.end);
+    ref.read(periodoProvider.notifier).cambiar(acotado.periodo);
+    if (acotado.recortado && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('El rango máximo es de 3 meses')),
+      );
+    }
   }
 
   @override
@@ -150,7 +153,9 @@ class _Contenido extends ConsumerWidget {
   /// Folio conocido por los datos ya cargados; si no, el prefijo del id.
   String _folio(String pedidoId) {
     final r = resumen;
-    final conocido = r.pedidosDeCobros[pedidoId] ??
+    final conocido =
+        r.pedidosDeCobros[pedidoId] ??
+        r.pedidosDeCambios[pedidoId] ??
         r.ganancias
             .where((g) => g.pedido.id == pedidoId)
             .map((g) => g.pedido)
@@ -164,15 +169,15 @@ class _Contenido extends ConsumerWidget {
     return prefijo.toUpperCase();
   }
 
-  String _concepto(CambioPrecio c) {
+  String _concepto(String pedidoId, CambioPrecio c) {
     if (c.campo == CampoPrecio.envio) return 'Envío';
     final prefijo = switch (c.campo) {
       CampoPrecio.alta => 'Mueble agregado: ',
       CampoPrecio.cancelacion => 'Mueble cancelado: ',
       _ => 'Precio de ',
     };
-    for (final g in resumen.ganancias.expand((g) => g.muebles)) {
-      if (g.mueble.id == c.muebleId) return '$prefijo${g.mueble.tipoMueble}';
+    for (final m in resumen.mueblesDeCambios[pedidoId] ?? const <Mueble>[]) {
+      if (m.id == c.muebleId) return '$prefijo${m.tipoMueble}';
     }
     return switch (c.campo) {
       CampoPrecio.alta => 'Mueble agregado',
@@ -187,26 +192,29 @@ class _Contenido extends ConsumerWidget {
     final r = resumen;
     final usuarios = ref.watch(usuariosProvider).value ?? const [];
     final materiales = ref.watch(materialesProvider).value ?? const [];
-    final cajas = ref.watch(cajasProvider).value ?? const <String, double>{};
-    final pendientesEntrega =
-        ref.watch(entregasPendientesProvider).value ?? const [];
+    final cajasAsync = ref.watch(cajasProvider);
+    final entregasAsync = ref.watch(entregasPendientesProvider);
+    final cajas = cajasAsync.value ?? const <String, double>{};
+    final pendientesEntrega = entregasAsync.value ?? const [];
 
     String nombre(String uid) =>
         usuarios.where((u) => u.uid == uid).firstOrNull?.nombre ??
         'Usuario desconocido';
 
     Widget titulo(String t) => Padding(
-          padding: const EdgeInsets.only(top: 20, bottom: 4),
-          child: Text(t, style: tema.textTheme.titleMedium),
-        );
+      padding: const EdgeInsets.only(top: 20, bottom: 4),
+      child: Text(t, style: tema.textTheme.titleMedium),
+    );
     Widget subtitulo(String t) => Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Text(t, style: tema.textTheme.labelLarge),
-        );
+      padding: const EdgeInsets.only(top: 8),
+      child: Text(t, style: tema.textTheme.labelLarge),
+    );
 
     final cajasConDinero = cajas.entries.where((e) => e.value != 0).toList();
-    final porConfirmar =
-        pendientesEntrega.fold<double>(0, (s, e) => s + e.monto);
+    final porConfirmar = pendientesEntrega.fold<double>(
+      0,
+      (s, e) => s + e.monto,
+    );
     final formas = r.cobros.porForma.entries.where((e) => e.value != 0);
 
     return ListView(
@@ -227,13 +235,25 @@ class _Contenido extends ConsumerWidget {
             Text('${_folio(e.key)}: ${formatearDinero(e.value)}'),
         ],
         titulo('Por entregar'),
-        if (cajasConDinero.isEmpty && pendientesEntrega.isEmpty)
+        if (cajasAsync.hasError || entregasAsync.hasError)
+          const Text('No se pudo cargar')
+        else if (cajasAsync.isLoading || entregasAsync.isLoading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          )
+        else if (cajasConDinero.isEmpty && pendientesEntrega.isEmpty)
           const Text('Nadie tiene dinero por entregar')
         else ...[
           for (final e in cajasConDinero)
             Text('${nombre(e.key)}: ${formatearDinero(e.value)}'),
+          // Ya está incluido en lo que lleva cada quien.
           if (pendientesEntrega.isNotEmpty)
-            Text('Entregas por confirmar: ${formatearDinero(porConfirmar)}'),
+            Text('De eso, por confirmar: ${formatearDinero(porConfirmar)}'),
         ],
         titulo('Lo gastado'),
         Text('Compras de material: ${formatearDinero(r.gastos.compras)}'),
@@ -243,8 +263,13 @@ class _Contenido extends ConsumerWidget {
         if (r.ganancias.isEmpty)
           const Text('Ningún pedido entregado en el periodo')
         else ...[
-          Text('Ganancia total: ${formatearDinero(r.gananciaTotal)} '
-              '(${r.ganancias.length} pedidos entregados)'),
+          Text(
+            'Ganancia total: ${formatearDinero(r.gananciaTotal)} '
+            '(${r.ganancias.length} '
+            '${r.ganancias.length == 1 ? 'pedido entregado' : 'pedidos entregados'})',
+          ),
+          if (r.ganancias.any((g) => g.incompleto))
+            const Text('Costo incompleto'),
           for (final tipo in TipoTrabajo.values)
             if ((r.muebles[tipo] ?? const []).isNotEmpty) ...[
               subtitulo(tipo.etiqueta),
@@ -270,7 +295,7 @@ class _Contenido extends ConsumerWidget {
         else
           for (final c in r.cambios)
             Text(
-              '${_folio(c.pedidoId)} · ${_concepto(c.cambio)}: '
+              '${_folio(c.pedidoId)} · ${_concepto(c.pedidoId, c.cambio)}: '
               '${formatearDinero(c.cambio.anterior)} → '
               '${formatearDinero(c.cambio.nuevo)}',
               style: c.cambio.nuevo < c.cambio.anterior
@@ -311,16 +336,18 @@ class _FilaMueble extends StatelessWidget {
     final texto = margen == null
         ? formatearDinero(g.ganancia)
         : '${formatearDinero(g.ganancia)} '
-            '(${(margen * 100).toStringAsFixed(1)}%)';
+              '(${(margen * 100).toStringAsFixed(1)}%)';
     return ListTile(
       contentPadding: EdgeInsets.zero,
       title: Text('${g.mueble.tipoMueble} · ${g.pedido.folio}'),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Precio ${formatearDinero(g.mueble.precio)} · '
-              'Materiales ${formatearDinero(g.materiales.monto)} · '
-              'Mano de obra ${formatearDinero(g.manoObra.monto)}'),
+          Text(
+            'Precio ${formatearDinero(g.mueble.precio)} · '
+            'Materiales ${formatearDinero(g.materiales.monto)} · '
+            'Mano de obra ${formatearDinero(g.manoObra.monto)}',
+          ),
           if (g.incompleto) const Text('Costo incompleto'),
         ],
       ),
@@ -340,15 +367,18 @@ class _FilaDiferencia extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final m =
-        materiales.where((x) => x.id == d.comparacion.materialId).firstOrNull;
+    final m = materiales
+        .where((x) => x.id == d.comparacion.materialId)
+        .firstOrNull;
     String cant(double c) => m == null ? '$c' : formatearCantidad(c, m.unidad);
     return ListTile(
       contentPadding: EdgeInsets.zero,
       title: Text('${d.pedido.folio} · ${d.mueble.tipoMueble}'),
-      subtitle: Text('${m?.nombre ?? 'Material desconocido'}: '
-          'estimado ${cant(d.comparacion.estimado)}, '
-          'usado ${cant(d.comparacion.usado)}'),
+      subtitle: Text(
+        '${m?.nombre ?? 'Material desconocido'}: '
+        'estimado ${cant(d.comparacion.estimado)}, '
+        'usado ${cant(d.comparacion.usado)}',
+      ),
     );
   }
 }

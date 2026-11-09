@@ -178,4 +178,38 @@ void main() {
     expect(r.pendientes.map((x) => x.pedido.id), ['e', 't']);
     expect(r.pendientes.last.saldo, 100.0);
   });
+
+  test(
+    'los cambios de un pedido sin pagos ni entrega traen folio y mueble',
+    () async {
+      await pedido('w', 'en_proceso');
+      await db.doc('pedidos/w/muebles/mc').set({
+        'tipoTrabajo': 'reparacion',
+        'tipoMueble': 'Silla',
+        'plantillaId': null,
+        'precio': 800,
+        'comentarios': '',
+        'estado': 'cancelado',
+      });
+      await db.doc('pedidos/w/cambios_precio/x2').set({
+        'campo': 'cancelacion',
+        'muebleId': 'mc',
+        'anterior': 800,
+        'nuevo': 0,
+        'motivo': null,
+        'usuarioId': 'u1',
+        'fecha': ts(DateTime(2026, 11, 6)),
+      });
+      final r = await armarResumen(
+        repo,
+        periodo: semana,
+        plantillas: const [],
+        ahora: ahora,
+      );
+      expect(r.pedidosDeCambios['w']!.folio, 'F-w');
+      expect(r.pedidosDeCambios['e']!.folio, 'F-e');
+      expect(r.mueblesDeCambios['w']!.single.tipoMueble, 'Silla');
+      expect(r.pedidosDeCobros.containsKey('w'), isFalse);
+    },
+  );
 }
